@@ -1,0 +1,64 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-navigation/native": "^7.1.9",
+    "@react-navigation/native-stack": "^7.3.13",
+    "axios": "^1.9.0",
+    "expo": "^53.0.9",
+    "expo-asset": "^11.1.5",
+    "expo-barcode-scanner": "^13.0.1",
+    "expo-camera": "^16.1.6",
+    "expo-constants": "^17.1.6",
+    "expo-file-system": "^18.1.10",
+    "expo-font": "^13.3.1",
+    "expo-image-loader": "~5.1.0",
+    "expo-keep-awake": "^14.1.4",
+    "expo-linear-gradient": "^14.1.4",
+    "expo-status-bar": "^2.2.3",
+    "react": "19.0.0",
+    "react-native": "^0.79.2",
+    "react-native-chart-kit": "^6.12.0",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-get-random-values": "^1.11.0",
+    "react-native-gifted-charts": "^1.4.61",
+    "react-native-haptic-feedback": "^2.3.3",
+    "react-native-linear-gradient": "^2.8.3",
+    "react-native-modal": "^14.0.0-rc.1",
+    "react-native-pie-chart": "^4.0.1",
+    "react-native-reanimated": "^3.17.5",
+    "react-native-safe-area-context": "^5.4.0",
+    "react-native-screens": "^4.10.0",
+    "react-native-svg": "^15.12.0",
+    "uuid": "^8.3.2",
+    "expo-dev-client": "~5.1.8"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.14.4",
+    "@types/jest": "^29.5.14",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RouckBlankOo/FrontEndStock.git"
+  },
+  "keywords": [
+    "sameress09"
+  ],
+  "author": "samer",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RouckBlankOo/FrontEndStock/issues"
+  },
+  "homepage": "https://github.com/RouckBlankOo/FrontEndStock#readme",
+  "description": ""
+}
