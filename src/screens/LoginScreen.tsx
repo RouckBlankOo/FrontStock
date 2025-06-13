@@ -31,12 +31,24 @@ export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
+  const STATIC_USERNAME = "admin";
+  const STATIC_PASSWORD = "123456";
   const handleLogin = async () => {
     if (!username || !password) {
       Alert.alert("Erreur", "Veuillez remplir tous les champs.", [
         { text: "OK" },
       ]);
+      return;
+    }
+
+    // STATIC LOGIN CHECK
+    if (username === "admin" && password === "123456") {
+      try {
+        await AsyncStorage.setItem("token", "STATIC_TOKEN");
+        navigation.navigate("Home");
+      } catch (err) {
+        Alert.alert("Erreur", "Échec du stockage local.", [{ text: "OK" }]);
+      }
       return;
     }
 
@@ -203,16 +215,17 @@ const styles = StyleSheet.create({
   },
   card: {
     width: width > 400 ? 380 : "92%",
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.borderRadius.large,
-    padding: theme.spacing.large,
-    marginTop: theme.spacing.large,
-    elevation: theme.shadow.elevation,
-    shadowColor: theme.shadow.shadowColor,
-    shadowOffset: theme.shadow.shadowOffset,
-    shadowOpacity: theme.shadow.shadowOpacity,
-    shadowRadius: theme.shadow.shadowRadius,
+    backgroundColor: "#FFFFFF", // white
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
+
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -252,7 +265,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: theme.colors.white,
-    fontSize: theme.fontSizes.button + 2,
+    fontSize: theme.fontSizes.regular,
     fontWeight: theme.fontWeights.bold as any,
   },
   linkText: {

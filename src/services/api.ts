@@ -1,9 +1,51 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CONSTANTS } from "../constants/index";
-import { Product } from "../types";
 
-const API_URL = CONSTANTS.API_URL_PROD || "http://192.168.1.13:5000/api";
+// Define types based on backend schemas
+export interface User {
+  _id: string;
+  name: string;
+  username: string;
+  role: "admin" | "worker";
+}
+
+export interface Category {
+  _id: string;
+  name: string;
+  subCategories: string[]; // Array of subCategory IDs
+}
+
+export interface SubCategory {
+  _id: string;
+  name: string;
+  category: string; // Category ID
+}
+
+export interface ProductStock {
+  color: string;
+  size: string;
+  quantity: number;
+}
+
+export interface Product {
+  _id: string;
+  name: string;
+  category: string; // Category ID
+  subCategory: string; // SubCategory ID
+  description?: string;
+  price: number;
+  stocks: ProductStock[];
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+
+const API_URL = CONSTANTS.API_URL_PROD;
 
 const api = axios.create({
   baseURL: API_URL,
@@ -22,7 +64,7 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error("Request error:", error);
+    console.error("Request error:", error.message);
     return Promise.reject(error);
   }
 );
@@ -36,37 +78,80 @@ api.interceptors.response.use(
     console.error("Response error:", error.message);
     if (error.response) {
       console.error("Error data:", error.response.data);
+      const { status, data } = error.response;
+      let errorMessage = data.message || "Une erreur est survenue.";
+      if (status === 401) {
+        errorMessage = "Non authentifié. Veuillez vous reconnecter.";
+      } else if (status === 409) {
+        errorMessage = "Conflit: Cette ressource existe déjà.";
+      } else if (status === 400) {
+        errorMessage = data.message || "Requête invalide.";
+      }
+      return Promise.reject({ ...error, message: errorMessage });
     }
     return Promise.reject(error);
   }
 );
 
-export const getUser = () => api.get("/auth/me");
-export const getProducts = () => api.get("/product");
-export const scanBarcode = (barcode: string) => api.get(`/product/scan/${barcode}`);
-export const getStockAnalytics = () => api.get("/analytics/stock");
-export const getFinanceAnalytics = () => api.get("/analytics/finance");
+// User APIs
+export const login = (payload: {
+  username: string;
+  password: string;
+  deviceName?: string;
+}) => api.post<ApiResponse<{ token: string; user: User }>>("/user/login", payload);
 
-export const addProduct = (product: Product) => {
-  return api.post("/product", product);
-};
-
-// UPDATED LOGIN: expects { username, password, deviceName }
-export const login = (payload: { username: string; password: string; deviceName?: string }) => {
-  return api.post("/user/login", payload);
-};
-
-// UPDATED SIGNUP: expects { name, username, password, role }
 export const signup = (payload: {
   name: string;
   username: string;
   password: string;
   role: "admin" | "caissier";
 }) => {
-  // Map "caissier" to "worker" for backend
   const backendPayload = {
     ...payload,
     role: payload.role === "caissier" ? "worker" : "admin",
   };
-  return api.post("/user/users", backendPayload);
+  return api.post<ApiResponse<{ token: string; user: User }>>("/user", backendPayload);
 };
+
+export const getUser = () => api.get<ApiResponse<User>>("/user/me");
+
+// Category APIs
+export const getCategories = () => api.get<ApiResponse<Category[]>>("/category/categories");
+
+export const getSubCategories = (categoryId: string) =>
+  api.get<ApiResponse<SubCategory[]>>(`/category/${categoryId}/sub`);
+
+export const createCategory = (payload: { name: string }) =>
+  api.post<ApiResponse<Category>>("/category", payload);
+
+export const createSubCategory = (payload: { name: string; categoryId: string }) =>
+  api.post<ApiResponse<SubCategory>>("/category/sub", payload);
+
+// Product APIs
+export const getProducts = () => api.get<ApiResponse<Product[]>>("/product");
+
+export const addProduct = (product: {
+  name: string;
+  category: string;
+  subCategory: string;
+  description?: string;
+  price: number;
+  stocks: ProductStock[];
+}) => api.post<ApiResponse<Product>>("/product", product);
+
+export const deleteProduct = (productId: string) =>
+  api.delete<ApiResponse<null>>(`/product/${productId}`);
+
+export const scanBarcode = (barcode: string) =>
+  api.get<ApiResponse<Product>>(`/product/scan/${barcode}`);
+
+// Stats APIs
+export const getTotalProducts = () => api.get<ApiResponse<number>>("/stats/total-products");
+
+export const getTotalStocks = () => api.get<ApiResponse<number>>("/stats/total-stocks");
+
+export const getProfit = () => api.get<ApiResponse<number>>("/stats/profit");
+
+export const getStockHistory = () => api.get<ApiResponse<any>>("/stats/stock-history");
+
+export default api;

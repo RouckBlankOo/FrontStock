@@ -1,27 +1,25 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   SafeAreaView,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
+import { scanBarcode, deleteProduct } from "../services/api";
 
 export default function DeleteArticleScreen() {
   const navigation = useNavigation();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [scannedBarcode, setScannedBarcode] = useState<string | null>(null);
+  const [scannedProduct, setScannedProduct] = useState<any | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-  const buttonScale = useState(new Animated.Value(1))[0];
 
   useEffect(() => {
     (async () => {
@@ -35,44 +33,40 @@ export default function DeleteArticleScreen() {
   }, [permission, requestPermission]);
 
   const handleBarcodeScanned = async ({ data }: { data: string }) => {
-    if (isProcessing || scannedBarcode) return;
+    if (isProcessing || scannedProduct) return;
     setIsProcessing(true);
-    setScannedBarcode(data);
-    setIsProcessing(false);
+    try {
+      const response = await scanBarcode(data);
+      setScannedProduct(response.data.data);
+    } catch (error: any) {
+      Alert.alert("Erreur", error.message || "Produit non trouvé.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDelete = async () => {
+    if (!scannedProduct?._id) return;
     setIsProcessing(true);
-    // TODO: Replace with your delete logic
-    setTimeout(() => {
+    try {
+      await deleteProduct(scannedProduct._id);
+      Alert.alert("Succès", "Article supprimé avec succès !", [
+        { text: "OK", onPress: () => setScannedProduct(null) },
+      ]);
+    } catch (error: any) {
+      Alert.alert("Erreur", error.message || "Échec de la suppression.");
+    } finally {
       setIsProcessing(false);
-      Alert.alert("Suppression", "Article supprimé avec succès !");
-      setScannedBarcode(null);
-    }, 1200);
+    }
   };
 
   const handleRecapture = () => {
-    setScannedBarcode(null);
+    setScannedProduct(null);
     setIsProcessing(false);
   };
 
   const handleBack = () => {
     navigation.goBack();
-  };
-
-  const animateButtonPress = () => {
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
   };
 
   if (hasPermission === null) {
@@ -92,7 +86,7 @@ export default function DeleteArticleScreen() {
         <TouchableOpacity
           onPress={handleBack}
           style={styles.backButton}
-          accessibilityLabel="Go back"
+          accessibilityLabel="Revenir"
         >
           <Text style={styles.backButtonText}>Revenir</Text>
         </TouchableOpacity>
@@ -102,28 +96,22 @@ export default function DeleteArticleScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.secondary]}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            onPress={handleBack}
-            style={styles.backIcon}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons
-              name="arrow-back-outline"
-              size={28}
-              color={theme.colors.background}
-            />
-          </TouchableOpacity>
-          <Text style={styles.title}>Supprimer un article</Text>
-        </View>
-      </LinearGradient>
-
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backIcon}
+          accessibilityLabel="Revenir"
+        >
+          <Ionicons
+            name="arrow-back-outline"
+            size={28}
+            color={theme.colors.white}
+          />
+        </TouchableOpacity>
+        <Text style={styles.title}>Supprimer un article</Text>
+      </View>
       <View style={styles.cameraContainer}>
-        {!scannedBarcode ? (
+        {!scannedProduct ? (
           <>
             <CameraView
               style={StyleSheet.absoluteFillObject}
@@ -155,37 +143,28 @@ export default function DeleteArticleScreen() {
           </>
         ) : (
           <View style={styles.capturedContainer}>
-            <Text style={styles.capturedMessage}>
-              Code-barres scanné : {scannedBarcode}
+            <Text style={styles.capturedMessage}>Article scanné :</Text>
+            <Text style={styles.productDetail}>
+              Nom : {scannedProduct.name}
             </Text>
-            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  isProcessing && styles.buttonDisabled,
-                  { marginBottom: theme.spacing.medium },
-                ]}
-                onPress={() => {
-                  animateButtonPress();
-                  handleDelete();
-                }}
-                disabled={isProcessing}
-                accessibilityLabel="Supprimer l'article"
-              >
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.secondary]}
-                  style={styles.gradientButton}
-                >
-                  <Ionicons
-                    name="trash-outline"
-                    size={24}
-                    color={theme.colors.background}
-                    style={styles.buttonIcon}
-                  />
-                  <Text style={styles.buttonText}>Supprimer</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
+            <Text style={styles.productDetail}>
+              Prix : {scannedProduct.price} €
+            </Text>
+            <Text style={styles.productDetail}>
+              Stock :{" "}
+              {scannedProduct.stocks.reduce(
+                (sum: number, stock: any) => sum + stock.quantity,
+                0
+              )}
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, isProcessing && styles.buttonDisabled]}
+              onPress={handleDelete}
+              disabled={isProcessing}
+              accessibilityLabel="Supprimer l'article"
+            >
+              <Text style={styles.buttonText}>Supprimer</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={handleRecapture}
@@ -207,27 +186,22 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    backgroundColor: theme.colors.primary,
     padding: theme.spacing.large,
     paddingTop: theme.spacing.large + 10,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    ...theme.shadows.medium,
   },
   backIcon: {
     position: "absolute",
-    left: 0,
+    left: theme.spacing.medium,
   },
   title: {
-    fontSize: theme.fontSizes.title + 6,
+    fontSize: theme.fontSizes.largeTitle,
     fontWeight: "bold",
-    color: theme.colors.background,
+    color: theme.colors.white,
     textAlign: "center",
   },
   cameraContainer: {
@@ -246,17 +220,16 @@ const styles = StyleSheet.create({
     height: 250,
     borderWidth: 3,
     borderColor: theme.colors.primary,
-    borderRadius: 18,
+    borderRadius: theme.borderRadius.medium,
     backgroundColor: "transparent",
-    marginBottom: 24,
+    marginBottom: theme.spacing.large,
   },
   scanMessage: {
-    color: "#fff",
-    fontSize: 18,
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.subtitle,
     fontWeight: "bold",
     textAlign: "center",
-    marginTop: 12,
-    textShadowColor: "#000",
+    textShadowColor: theme.colors.black,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -267,49 +240,44 @@ const styles = StyleSheet.create({
     padding: theme.spacing.large,
   },
   capturedMessage: {
-    fontSize: theme.fontSizes.regular,
+    fontSize: theme.fontSizes.subtitle,
+    fontWeight: "bold",
     color: theme.colors.text,
     marginBottom: theme.spacing.large,
     textAlign: "center",
   },
+  productDetail: {
+    fontSize: theme.fontSizes.regular,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.small,
+    textAlign: "center",
+  },
   button: {
-    marginVertical: theme.spacing.large,
+    ...theme.button,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    marginVertical: theme.spacing.medium,
   },
   buttonDisabled: {
-    opacity: 0.6,
-  },
-  gradientButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 24,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  buttonIcon: {
-    marginRight: theme.spacing.small,
+    opacity: theme.button.disabledOpacity,
   },
   buttonText: {
-    color: theme.colors.background,
-    fontSize: theme.fontSizes.button,
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
   },
   secondaryButton: {
+    paddingVertical: theme.spacing.small,
+    paddingHorizontal: theme.spacing.large,
+    borderRadius: theme.borderRadius.medium,
+    backgroundColor: theme.colors.inputBackground,
     marginTop: theme.spacing.medium,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderRadius: 18,
-    backgroundColor: "#eee",
+    ...theme.shadows.small,
   },
   secondaryButtonText: {
     color: theme.colors.primary,
+    fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
-    fontSize: theme.fontSizes.button,
   },
   message: {
     fontSize: theme.fontSizes.regular,
@@ -322,10 +290,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.medium,
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.medium,
+    ...theme.shadows.small,
   },
   backButtonText: {
     color: theme.colors.white,
-    fontSize: theme.fontSizes.button,
+    fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
     textAlign: "center",
   },

@@ -6,31 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Animated,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
-import { RootStackParamList, Product } from "../types";
+import { RootStackParamList } from "../types";
+import { scanBarcode } from "../services/api";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-const API_BASE_URL = "http://192.168.1.13:5000"; // Replace with your computer's IP address
 
 export default function BarcodeScannerScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [scannedProduct, setScannedProduct] = useState<Product | null>(null);
+  const [scannedProduct, setScannedProduct] = useState<any | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
-
-  // Animation states
-  const buttonScale = useState(new Animated.Value(1))[0];
 
   useEffect(() => {
     (async () => {
@@ -48,57 +41,15 @@ export default function BarcodeScannerScreen() {
     setIsProcessing(true);
 
     try {
-      const product = await fetchProductByBarcode(data);
-      setScannedProduct(product);
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch product.";
-      console.error("Error fetching product:", error);
-      Alert.alert("Erreur", `${errorMessage} Veuillez réessayer.`, [
-        { text: "OK" },
-      ]);
+      const response = await scanBarcode(data);
+      setScannedProduct(response.data.data);
+    } catch (error: any) {
+      Alert.alert(
+        "Erreur",
+        error.message || "Échec de la récupération du produit."
+      );
     } finally {
       setIsProcessing(false);
-    }
-  };
-
-  const fetchProductByBarcode = async (barcode: string): Promise<Product> => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        throw new Error("No authentication token found. Please log in again.");
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/product/scan`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ barcode }),
-      });
-
-      if (!response.ok) {
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to fetch product.");
-        } else {
-          const text = await response.text();
-          console.error("Non-JSON response from backend:", text);
-          throw new Error(
-            `Unexpected response from server: ${text.slice(0, 100)}...`
-          );
-        }
-      }
-
-      const result = await response.json();
-      return result.data.product as Product;
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch product.";
-      console.error("Error fetching product:", error);
-      throw new Error(errorMessage);
     }
   };
 
@@ -109,21 +60,6 @@ export default function BarcodeScannerScreen() {
   const handleRecapture = () => {
     setScannedProduct(null);
     setIsProcessing(false);
-  };
-
-  const animateButtonPress = () => {
-    Animated.sequence([
-      Animated.timing(buttonScale, {
-        toValue: 0.95,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(buttonScale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
   };
 
   if (hasPermission === null) {
@@ -143,7 +79,7 @@ export default function BarcodeScannerScreen() {
         <TouchableOpacity
           onPress={handleBack}
           style={styles.backButton}
-          accessibilityLabel="Go back"
+          accessibilityLabel="Revenir"
         >
           <Text style={styles.backButtonText}>Revenir</Text>
         </TouchableOpacity>
@@ -153,26 +89,20 @@ export default function BarcodeScannerScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.secondary]}
-        style={styles.header}
-      >
-        <View style={styles.headerContent}>
-          <TouchableOpacity
-            onPress={handleBack}
-            style={styles.backIcon}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons
-              name="arrow-back-outline"
-              size={28}
-              color={theme.colors.background}
-            />
-          </TouchableOpacity>
-          <Text style={styles.title}>Scanner le produit</Text>
-        </View>
-      </LinearGradient>
-
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
+          style={styles.backIcon}
+          accessibilityLabel="Revenir"
+        >
+          <Ionicons
+            name="arrow-back-outline"
+            size={28}
+            color={theme.colors.white}
+          />
+        </TouchableOpacity>
+        <Text style={styles.title}>Scanner le produit</Text>
+      </View>
       <View style={styles.cameraContainer}>
         {!scannedProduct ? (
           <>
@@ -206,64 +136,28 @@ export default function BarcodeScannerScreen() {
           </>
         ) : (
           <View style={styles.capturedContainer}>
-            {isProcessing ? (
-              <Text style={styles.capturedMessage}>
-                Récupération du produit...
-              </Text>
-            ) : scannedProduct ? (
-              <>
-                <Text style={styles.capturedMessage}>Produit trouvé :</Text>
-                <Text style={styles.productDetail}>
-                  Nom : {scannedProduct.name}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Code-barres : {scannedProduct.barcode}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Catégorie : {scannedProduct.category}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Sous-catégorie : {scannedProduct.subCategory}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Couleur : {scannedProduct.color}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Taille : {scannedProduct.size}
-                </Text>
-                <Text style={styles.productDetail}>
-                  Quantité : {scannedProduct.quantity}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.capturedMessage}>
-                Aucun produit trouvé. Appuyez sur « Reprise » pour réessayer.
-              </Text>
-            )}
-            <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
-              <TouchableOpacity
-                style={[styles.button, isProcessing && styles.buttonDisabled]}
-                onPress={() => {
-                  animateButtonPress();
-                  handleRecapture();
-                }}
-                disabled={isProcessing}
-                accessibilityLabel="Recapture barcode"
-              >
-                <LinearGradient
-                  colors={[theme.colors.primary, theme.colors.secondary]}
-                  style={styles.gradientButton}
-                >
-                  <Ionicons
-                    name="refresh-outline"
-                    size={24}
-                    color={theme.colors.background}
-                    style={styles.buttonIcon}
-                  />
-                  <Text style={styles.buttonText}>Reprise</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </Animated.View>
+            <Text style={styles.capturedMessage}>Produit trouvé :</Text>
+            <Text style={styles.productDetail}>
+              Nom : {scannedProduct.name}
+            </Text>
+            <Text style={styles.productDetail}>
+              Prix : {scannedProduct.price} €
+            </Text>
+            <Text style={styles.productDetail}>
+              Stock :{" "}
+              {scannedProduct.stocks.reduce(
+                (sum: number, stock: any) => sum + stock.quantity,
+                0
+              )}
+            </Text>
+            <TouchableOpacity
+              style={[styles.button, isProcessing && styles.buttonDisabled]}
+              onPress={handleRecapture}
+              disabled={isProcessing}
+              accessibilityLabel="Reprendre"
+            >
+              <Text style={styles.buttonText}>Reprendre</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -277,28 +171,22 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    backgroundColor: theme.colors.primary,
     padding: theme.spacing.large,
     paddingTop: theme.spacing.large + 10,
-
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  headerContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    ...theme.shadows.medium,
   },
   backIcon: {
     position: "absolute",
     left: theme.spacing.medium,
   },
   title: {
-    fontSize: theme.fontSizes.title + 6,
+    fontSize: theme.fontSizes.largeTitle,
     fontWeight: "bold",
-    color: theme.colors.background,
+    color: theme.colors.white,
     textAlign: "center",
   },
   cameraContainer: {
@@ -317,17 +205,16 @@ const styles = StyleSheet.create({
     height: 250,
     borderWidth: 3,
     borderColor: theme.colors.primary,
-    borderRadius: 18,
+    borderRadius: theme.borderRadius.medium,
     backgroundColor: "transparent",
-    marginBottom: 24,
+    marginBottom: theme.spacing.large,
   },
   scanMessage: {
-    color: "#fff",
-    fontSize: 18,
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.subtitle,
     fontWeight: "bold",
     textAlign: "center",
-    marginTop: 12,
-    textShadowColor: "#000",
+    textShadowColor: theme.colors.black,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
@@ -338,7 +225,8 @@ const styles = StyleSheet.create({
     padding: theme.spacing.large,
   },
   capturedMessage: {
-    fontSize: theme.fontSizes.regular,
+    fontSize: theme.fontSizes.subtitle,
+    fontWeight: "bold",
     color: theme.colors.text,
     marginBottom: theme.spacing.large,
     textAlign: "center",
@@ -350,30 +238,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   button: {
+    ...theme.button,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
     marginVertical: theme.spacing.large,
   },
   buttonDisabled: {
-    opacity: 0.6,
-  },
-  gradientButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 24,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  buttonIcon: {
-    marginRight: theme.spacing.small,
+    opacity: theme.button.disabledOpacity,
   },
   buttonText: {
-    color: theme.colors.background,
-    fontSize: theme.fontSizes.button,
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
   },
   message: {
@@ -387,10 +262,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.medium,
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.medium,
+    ...theme.shadows.small,
   },
   backButtonText: {
     color: theme.colors.white,
-    fontSize: theme.fontSizes.button,
+    fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
     textAlign: "center",
   },

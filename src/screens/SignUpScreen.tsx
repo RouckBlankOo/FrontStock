@@ -16,7 +16,6 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { signup } from "../services/api";
 import { theme } from "../constants/theme";
@@ -75,10 +74,7 @@ export default function SignupScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      <LinearGradient
-        colors={[theme.colors.primary, theme.colors.secondary]}
-        style={styles.gradientHeader}
-      >
+      <View style={styles.header}>
         <Ionicons
           name="person-add-outline"
           size={56}
@@ -89,7 +85,7 @@ export default function SignupScreen() {
         <Text style={styles.headerSubtitle}>
           Rejoignez Stokÿ dès aujourd'hui
         </Text>
-      </LinearGradient>
+      </View>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -109,7 +105,7 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Nom complet"
-                placeholderTextColor={theme.colors.text + "80"}
+                placeholderTextColor={theme.colors.textSecondary}
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
@@ -126,7 +122,7 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Nom d'utilisateur"
-                placeholderTextColor={theme.colors.text + "80"}
+                placeholderTextColor={theme.colors.textSecondary}
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -143,7 +139,7 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Mot de passe"
-                placeholderTextColor={theme.colors.text + "80"}
+                placeholderTextColor={theme.colors.textSecondary}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -160,7 +156,7 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Confirmer le mot de passe"
-                placeholderTextColor={theme.colors.text + "80"}
+                placeholderTextColor={theme.colors.textSecondary}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
@@ -211,24 +207,11 @@ export default function SignupScreen() {
               disabled={isLoading}
               activeOpacity={0.85}
             >
-              <LinearGradient
-                colors={[theme.colors.primary, theme.colors.secondary]}
-                style={styles.gradientButton}
-              >
-                {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.white} />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="person-add-outline"
-                      size={22}
-                      color={theme.colors.white}
-                      style={styles.buttonIcon}
-                    />
-                    <Text style={styles.buttonText}>Créer un compte</Text>
-                  </>
-                )}
-              </LinearGradient>
+              {isLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.white} />
+              ) : (
+                <Text style={styles.buttonText}>Créer un compte</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity onPress={handleLoginRedirect} activeOpacity={0.8}>
@@ -248,58 +231,51 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  gradientHeader: {
-    width: "100%",
-    paddingTop: 48,
-    paddingBottom: 32,
+  header: {
+    backgroundColor: theme.colors.primary,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.large,
     alignItems: "center",
-    borderBottomLeftRadius: theme.borderRadius.large * 2,
-    borderBottomRightRadius: theme.borderRadius.large * 2,
-    marginBottom: -theme.spacing.large,
+    borderBottomLeftRadius: theme.borderRadius.large,
+    borderBottomRightRadius: theme.borderRadius.large,
+    marginBottom: theme.spacing.medium,
+    ...theme.shadows.medium,
   },
   headerIcon: {
     marginBottom: theme.spacing.small,
   },
   headerTitle: {
-    fontSize: theme.fontSizes.title + 10,
-    fontWeight: theme.fontWeights.extraBold as any,
+    fontSize: theme.fontSizes.largeTitle,
+    fontWeight: "800", // Replace with a valid fontWeight value
     color: theme.colors.white,
     textAlign: "center",
-    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: theme.fontSizes.subtitle + 2,
+    fontSize: theme.fontSizes.subtitle,
     color: theme.colors.white,
     textAlign: "center",
-    opacity: 0.45,
+    opacity: 0.85,
   },
   scrollContent: {
-    flexGrow: 0,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingBottom: theme.spacing.large,
   },
   card: {
+    ...theme.card,
     width: width > 400 ? 380 : "92%",
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.borderRadius.large,
-    padding: theme.spacing.large,
     marginTop: theme.spacing.large,
-    elevation: theme.shadow.elevation,
-    shadowColor: theme.shadow.shadowColor,
-    shadowOffset: theme.shadow.shadowOffset,
-    shadowOpacity: theme.shadow.shadowOpacity,
-    shadowRadius: theme.shadow.shadowRadius,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
     borderRadius: theme.borderRadius.medium,
     marginVertical: theme.spacing.small,
     paddingHorizontal: theme.spacing.medium,
-    paddingVertical: 2,
-    width: "100%",
+    backgroundColor: theme.colors.inputBackground,
   },
   inputIcon: {
     marginRight: theme.spacing.small,
@@ -315,22 +291,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginVertical: theme.spacing.medium,
     justifyContent: "center",
-    width: "100%",
   },
   roleLabel: {
     fontSize: theme.fontSizes.regular,
     color: theme.colors.text,
-    fontWeight: theme.fontWeights.medium as any,
+    fontWeight: "500", // Replace with a valid fontWeight value
     marginRight: theme.spacing.medium,
   },
   roleButton: {
     paddingVertical: theme.spacing.small,
     paddingHorizontal: theme.spacing.large,
     borderRadius: theme.borderRadius.medium,
-    borderWidth: 1.5,
-    borderColor: theme.colors.inputBackground,
+    borderWidth: 1,
+    borderColor: theme.colors.inputBorder,
     marginHorizontal: theme.spacing.small,
     backgroundColor: theme.colors.inputBackground,
+    ...theme.shadows.small,
   },
   roleButtonSelected: {
     backgroundColor: theme.colors.primary,
@@ -338,41 +314,32 @@ const styles = StyleSheet.create({
   },
   roleText: {
     color: theme.colors.text,
-    fontWeight: theme.fontWeights.medium as any,
+    fontWeight: "500", // Replace with a valid fontWeight value
     fontSize: theme.fontSizes.regular,
   },
   roleTextSelected: {
     color: theme.colors.white,
-    fontWeight: theme.fontWeights.bold as any,
+    fontWeight: "bold",
   },
   button: {
+    ...theme.button,
+    backgroundColor: theme.colors.primary,
     marginVertical: theme.spacing.large,
-    width: "100%",
   },
   buttonDisabled: {
-    opacity: 0.6,
-  },
-  gradientButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: theme.spacing.large,
-    borderRadius: theme.borderRadius.medium,
-    width: "100%",
-  },
-  buttonIcon: {
-    marginRight: theme.spacing.medium,
+    opacity: theme.button.disabledOpacity,
   },
   buttonText: {
     color: theme.colors.white,
-    fontSize: theme.fontSizes.button + 2,
-    fontWeight: theme.fontWeights.bold as any,
+    fontSize: theme.fontSizes.regular,
+    fontWeight: "bold",
+    textAlign: "center",
   },
   linkText: {
     fontSize: theme.fontSizes.regular,
     color: theme.colors.primary,
     textAlign: "center",
     marginTop: theme.spacing.medium,
-    fontWeight: theme.fontWeights.medium as any,
+    fontWeight: "500", // Adjusted to match a valid fontWeight value
   },
 });
