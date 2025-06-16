@@ -11,6 +11,11 @@ import AddCategoryScreen from "../screens/AddCategoryScreen";
 import AnalyticsScreen from "../screens/AnalyticsScreen";
 import { RootStackParamList } from "../types";
 import FianancialAnalytics from "../screens/FianancialAnalytics";
+import AddStockScreen from "../screens/AddStockScreen";
+import RemoveStockScreen from "../screens/RemoveStockScreen";
+import SellStockScreen from "../screens/SellStockScreen";
+import ReturnStockScreen from "../screens/ReturnStockScreen";
+import UpdateStockScreen from "../screens/UpdateStockScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -18,10 +23,8 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Signup" // Set the initial route to Signup
-        screenOptions={{
-          headerShown: false, // Hide default header since we have custom headers
-        }}
+        initialRouteName="Signup"
+        screenOptions={{ headerShown: false }}
       >
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
@@ -35,6 +38,11 @@ export default function AppNavigator() {
           name="FianancialAnalytics"
           component={FianancialAnalytics}
         />
+        <Stack.Screen name="AddStockScreen" component={AddStockScreen} />
+        <Stack.Screen name="RemoveStockScreen" component={RemoveStockScreen} />
+        <Stack.Screen name="SellStockScreen" component={SellStockScreen} />
+        <Stack.Screen name="ReturnStockScreen" component={ReturnStockScreen} />
+        <Stack.Screen name="UpdateStockScreen" component={UpdateStockScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

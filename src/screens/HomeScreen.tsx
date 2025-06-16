@@ -9,20 +9,23 @@ import {
   SafeAreaView,
   Platform,
   useWindowDimensions,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import ModalComponent from "react-native-modal";
+import { SafeAreaView as SafeAreaViewContext } from "react-native-safe-area-context";
+import StockActionMenu from "../components/StockActionMenu";
 import { theme } from "../constants/theme";
 import { RootStackParamList } from "../types";
-import { productColors } from "../constants/colors"; // <-- Use shared palette
+import { productColors } from "../constants/colors";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const user = {
   email: "demo@stoky.com",
-  role: "admin",
+  role: "administrateur",
 };
 
 const products = [
@@ -55,12 +58,13 @@ const products = [
   },
 ];
 
-// Use the shared color palette everywhere
+// Utiliser la palette de couleurs partagée partout
 const colors = productColors;
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavigationProp>();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [stockMenuVisible, setStockMenuVisible] = useState(false);
   const menuAnim = useState(new Animated.Value(0))[0];
 
   const [filterVisible, setFilterVisible] = useState(false);
@@ -71,7 +75,7 @@ export default function HomeScreen() {
     size: "",
   });
 
-  // Filter modal dropdown/modal states
+  // États des modals de filtrage
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [subCategoryModalVisible, setSubCategoryModalVisible] = useState(false);
   const [sizeModalVisible, setSizeModalVisible] = useState(false);
@@ -93,13 +97,10 @@ export default function HomeScreen() {
 
   const colorScales = useMemo(
     () =>
-      colors.reduce(
-        (acc, c) => {
-          acc[c.name] = new Animated.Value(1);
-          return acc;
-        },
-        {} as { [key: string]: Animated.Value }
-      ),
+      colors.reduce((acc, c) => {
+        acc[c.name] = new Animated.Value(1);
+        return acc;
+      }, {} as { [key: string]: Animated.Value }),
     [colors]
   );
 
@@ -161,7 +162,7 @@ export default function HomeScreen() {
     navigation.replace("Login");
   };
 
-  // Filtering logic
+  // Logique de filtrage
   const filteredProducts = products.filter((p) => {
     return (
       (!filter.category ||
@@ -179,7 +180,7 @@ export default function HomeScreen() {
     );
   });
 
-  // Table rendering (no name column, color as circle)
+  // Rendu du tableau (sans colonne nom, couleur en cercle)
   const renderProduct = ({ item }: { item: (typeof products)[0] }) => (
     <View style={styles.tableRow}>
       <Text
@@ -235,82 +236,87 @@ export default function HomeScreen() {
     </View>
   );
 
-  // Responsive modal width
+  // Largeur du modal responsive
   const modalWidth = width > 500 ? 400 : width * 0.95;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Ionicons
-          name="home-outline"
-          size={Math.max(24, width * 0.08)}
-          color={theme.colors.primary}
-        />
-        <View>
-          <Text
-            style={[styles.title, { fontSize: Math.max(16, width * 0.045) }]}
-          >
-            Bienvenue, {user.email}
-          </Text>
-          <Text
-            style={[styles.subtitle, { fontSize: Math.max(12, width * 0.035) }]}
-          >
-            Rôle : {user.role}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={styles.filterButton}
-          onPress={() => setFilterVisible(true)}
-        >
+    <SafeAreaViewContext style={styles.container}>
+      <ScrollView>
+        <View style={styles.header}>
           <Ionicons
-            name="filter-outline"
-            size={Math.max(24, width * 0.07)}
+            name="home-outline"
+            size={Math.max(24, width * 0.08)}
             color={theme.colors.primary}
           />
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.tableContainer}>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, styles.categoryCell]}>
-            Catégorie
-          </Text>
-          <Text style={[styles.headerCell, styles.subCategoryCell]}>
-            Sous-catégorie
-          </Text>
-          <Text style={[styles.headerCell, styles.colorCell]}>Couleur</Text>
-          <Text style={[styles.headerCell, styles.sizeCell]}>Taille</Text>
-          <Text style={[styles.headerCell, styles.qtyCell]}>Qté</Text>
+          <View>
+            <Text
+              style={[styles.title, { fontSize: Math.max(16, width * 0.045) }]}
+            >
+              Bienvenue, {user.email}
+            </Text>
+            <Text
+              style={[
+                styles.subtitle,
+                { fontSize: Math.max(12, width * 0.035) },
+              ]}
+            >
+              Rôle : {user.role}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setFilterVisible(true)}
+          >
+            <Ionicons
+              name="filter-outline"
+              size={Math.max(24, width * 0.07)}
+              color={theme.colors.primary}
+            />
+          </TouchableOpacity>
         </View>
-        <FlatList
-          data={filteredProducts}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={
-            filteredProducts.length === 0 ? styles.emptyList : undefined
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons
-                name="cube-outline"
-                size={Math.max(48, width * 0.13)}
-                color={theme.colors.text + "80"}
-              />
-              <Text style={styles.emptyText}>Aucun produit trouvé</Text>
-              <Text style={styles.emptySubText}>
-                Ajoutez des produits pour les voir listés ici
-              </Text>
-            </View>
-          }
-        />
-      </View>
 
-      {/* Floating Menu Button */}
+        <View style={styles.tableContainer}>
+          <View style={styles.tableHeader}>
+            <Text style={[styles.headerCell, styles.categoryCell]}>
+              Catégorie
+            </Text>
+            <Text style={[styles.headerCell, styles.subCategoryCell]}>
+              Sous-catégorie
+            </Text>
+            <Text style={[styles.headerCell, styles.colorCell]}>Couleur</Text>
+            <Text style={[styles.headerCell, styles.sizeCell]}>Taille</Text>
+            <Text style={[styles.headerCell, styles.qtyCell]}>Qté</Text>
+          </View>
+          <FlatList
+            data={filteredProducts}
+            renderItem={renderProduct}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={
+              filteredProducts.length === 0 ? styles.emptyList : undefined
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Ionicons
+                  name="cube-outline"
+                  size={Math.max(48, width * 0.13)}
+                  color={theme.colors.text + "80"}
+                />
+                <Text style={styles.emptyText}>Aucun produit trouvé</Text>
+                <Text style={styles.emptySubText}>
+                  Ajoutez des produits pour les voir listés ici
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      </ScrollView>
+
+      {/* Bouton de menu flottant */}
       <TouchableOpacity style={styles.menuButton} onPress={toggleMenu}>
         <Ionicons name="menu" size={32} color={theme.colors.white} />
       </TouchableOpacity>
 
-      {/* Animated Floating Menu */}
+      {/* Menu flottant animé */}
       {menuVisible && (
         <Animated.View
           style={[
@@ -374,7 +380,7 @@ export default function HomeScreen() {
             }}
           >
             <Ionicons name="analytics" size={24} color={theme.colors.primary} />
-            <Text style={styles.menuText}>Voix les analyse de stock</Text>
+            <Text style={styles.menuText}>Voir les analyses de stock</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -389,7 +395,7 @@ export default function HomeScreen() {
               size={24}
               color={theme.colors.primary}
             />
-            <Text style={styles.menuText}>Analyse Financière</Text>
+            <Text style={styles.menuText}>Analyse financière</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -411,6 +417,21 @@ export default function HomeScreen() {
             style={styles.menuItem}
             onPress={() => {
               toggleMenu();
+              setStockMenuVisible(true);
+            }}
+          >
+            <Ionicons
+              name="cube-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.menuText}>Gestion du stock</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => {
+              toggleMenu();
               handleLogout();
             }}
           >
@@ -426,13 +447,33 @@ export default function HomeScreen() {
         </Animated.View>
       )}
 
-      {/* Filter Modal */}
+      {/* Modal de gestion du stock */}
+      <ModalComponent
+        isVisible={stockMenuVisible}
+        onBackdropPress={() => setStockMenuVisible(false)}
+        style={styles.modal}
+      >
+        <View style={[styles.filterModal, { width: modalWidth }]}>
+          <Text style={styles.filterTitle}>Gestion du stock</Text>
+          <StockActionMenu />
+          <TouchableOpacity
+            style={styles.filterButtonModal}
+            onPress={() => setStockMenuVisible(false)}
+          >
+            <Text style={{ color: theme.colors.white, textAlign: "center" }}>
+              Fermer
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ModalComponent>
+
+      {/* Modal de filtrage */}
       {filterVisible && (
         <View style={styles.filterModalOverlay}>
           <View style={[styles.filterModal, { width: modalWidth }]}>
             <Text style={styles.filterTitle}>Filtrer les produits</Text>
 
-            {/* Category Dropdown */}
+            {/* Menu déroulant des catégories */}
             <View style={styles.formField}>
               <Text style={styles.label}>Catégorie</Text>
               <TouchableOpacity
@@ -481,7 +522,7 @@ export default function HomeScreen() {
               </ModalComponent>
             </View>
 
-            {/* SubCategory Dropdown */}
+            {/* Menu déroulant des sous-catégories */}
             <View style={styles.formField}>
               <Text style={styles.label}>Sous-catégorie</Text>
               <TouchableOpacity
@@ -539,7 +580,7 @@ export default function HomeScreen() {
               </ModalComponent>
             </View>
 
-            {/* Color Palette */}
+            {/* Palette de couleurs */}
             <View style={styles.formField}>
               <Text style={styles.label}>Couleur</Text>
               <View style={styles.colorPalette}>
@@ -585,7 +626,7 @@ export default function HomeScreen() {
               )}
             </View>
 
-            {/* Size Dropdown */}
+            {/* Menu déroulant des tailles */}
             <View style={styles.formField}>
               <Text style={styles.label}>Taille</Text>
               <TouchableOpacity
@@ -633,7 +674,7 @@ export default function HomeScreen() {
               </ModalComponent>
             </View>
 
-            {/* Buttons */}
+            {/* Boutons */}
             <View style={styles.filterButtonsRow}>
               <TouchableOpacity
                 style={[styles.filterButtonModal, { marginRight: 8 }]}
@@ -659,7 +700,7 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </SafeAreaViewContext>
   );
 }
 
@@ -694,13 +735,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.text,
     marginLeft: 12,
-  },
-  inventoryTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: theme.colors.primary,
-    marginBottom: 16,
-    marginTop: 8,
   },
   tableContainer: {
     flex: 1,

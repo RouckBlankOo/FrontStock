@@ -13,7 +13,7 @@ export interface User {
 export interface Category {
   _id: string;
   name: string;
-  subCategories: string[]; // Array of subCategory IDs
+  subCategories: string[] | SubCategory[]; // Array of subCategory IDs or objects
 }
 
 export interface SubCategory {
@@ -44,6 +44,23 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+// Add this interface for categories response
+export interface CategoriesResponse {
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+  categories: Category[];
+}
+
+// Add this interface for subcategories response
+export interface SubCategoriesResponse {
+  page: number;
+  size: number;
+  total: number;
+  totalPages: number;
+  subCategories: SubCategory[];
+}
 
 const API_URL = CONSTANTS.API_URL_PROD;
 
@@ -115,17 +132,21 @@ export const signup = (payload: {
 
 export const getUser = () => api.get<ApiResponse<User>>("/user/me");
 
-// Category APIs
-export const getCategories = () => api.get<ApiResponse<Category[]>>("/category/categories");
+// Category APIs - Updated to match backend routes
+export const getCategories = () => 
+  api.get<ApiResponse<CategoriesResponse>>("/category/categories");
 
-export const getSubCategories = (categoryId: string) =>
-  api.get<ApiResponse<SubCategory[]>>(`/category/${categoryId}/sub`);
+// Updated to match backend route structure
+export const getSubCategories = (categoryId?: string) => {
+  const params = categoryId ? { category: categoryId } : {};
+  return api.get<ApiResponse<SubCategoriesResponse>>("/category/subcategories", { params });
+};
 
 export const createCategory = (payload: { name: string }) =>
-  api.post<ApiResponse<Category>>("/category", payload);
+  api.post<ApiResponse<Category>>("/category/categories", payload);
 
-export const createSubCategory = (payload: { name: string; categoryId: string }) =>
-  api.post<ApiResponse<SubCategory>>("/category/sub", payload);
+export const createSubCategory = (payload: { name: string; category: string }) =>
+  api.post<ApiResponse<SubCategory>>("/category/subcategories", payload);
 
 // Product APIs
 export const getProducts = () => api.get<ApiResponse<Product[]>>("/product");
@@ -153,5 +174,22 @@ export const getTotalStocks = () => api.get<ApiResponse<number>>("/stats/total-s
 export const getProfit = () => api.get<ApiResponse<number>>("/stats/profit");
 
 export const getStockHistory = () => api.get<ApiResponse<any>>("/stats/stock-history");
+
+// Add these functions to your api.ts file
+
+export const addStock = (productId: string, payload: { quantity: number; reason: string }) =>
+  api.post<ApiResponse<any>>(`/product/${productId}/add-stock`, payload);
+
+export const removeStock = (productId: string, payload: { quantity: number; reason: string }) =>
+  api.post<ApiResponse<any>>(`/product/${productId}/remove-stock`, payload);
+
+export const sellStock = (productId: string, payload: { quantity: number; reason: string }) =>
+  api.post<ApiResponse<any>>(`/product/${productId}/sell`, payload);
+
+export const returnStock = (productId: string, payload: { quantity: number; reason: string }) =>
+  api.post<ApiResponse<any>>(`/product/${productId}/return`, payload);
+
+export const updateStock = (productId: string, payload: { quantity: number; reason: string }) =>
+  api.post<ApiResponse<any>>(`/product/${productId}/update-stock`, payload);
 
 export default api;
