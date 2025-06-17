@@ -112,17 +112,7 @@ export default function BarcodeScannerScreen() {
               facing="back"
               onBarcodeScanned={handleBarcodeScanned}
               barcodeScannerSettings={{
-                barcodeTypes: [
-                  "ean13",
-                  "ean8",
-                  "upc_a",
-                  "upc_e",
-                  "code128",
-                  "code39",
-                  "code93",
-                  "codabar",
-                  "qr",
-                ],
+                barcodeTypes: ["code128", "code39", "code93", "codabar", "qr"],
               }}
             />
             <View style={styles.overlay}>

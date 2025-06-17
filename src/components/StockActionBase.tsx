@@ -1,22 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  ScrollView,
-  Alert,
   TextInput,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  Button,
+  StyleSheet,
+  ScrollView,
 } from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { useNavigation } from "@react-navigation/native";
-import { Picker } from "@react-native-picker/picker";
-import { getProducts, Product } from "../services/api";
-import { theme } from "../constants/theme";
+import BarcodeScanner from "./BarcodeScanner";
 
 interface StockActionBaseProps {
   title: string;
@@ -31,253 +22,142 @@ interface StockActionBaseProps {
   isDecrement?: boolean;
 }
 
-export default function StockActionBase({
+const StockActionBase = ({
   title,
   actionName,
   actionColor,
   buttonText,
   onSubmit,
   isDecrement = false,
-}: StockActionBaseProps) {
-  const navigation = useNavigation();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState("");
-  const [quantity, setQuantity] = useState("1");
+}: StockActionBaseProps) => {
+  const [productId, setProductId] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
-    setLoading(true);
-    try {
-      const response = await getProducts();
-      setProducts(response.data.data || []);
-    } catch (error) {
-      console.error("Error fetching products:", error);
-      Alert.alert("Erreur", "Impossible de charger les produits.");
-    } finally {
-      setLoading(false);
-    }
+  const handleBarcodeScanned = (value: string) => {
+    setProductId(value);
   };
 
   const handleSubmit = async () => {
-    // Validate input
-    if (!selectedProduct) {
-      Alert.alert("Erreur", "Veuillez sélectionner un produit.");
+    if (!productId || !quantity) {
+      setError("Veuillez remplir tous les champs obligatoires");
       return;
     }
 
-    const parsedQuantity = parseInt(quantity);
-    if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
-      Alert.alert("Erreur", "Veuillez entrer une quantité valide.");
+    const quantityNum = parseInt(quantity, 10);
+    if (isNaN(quantityNum) || quantityNum <= 0) {
+      setError("La quantité doit être un nombre positif");
       return;
     }
 
-    if (!reason.trim()) {
-      Alert.alert("Erreur", "Veuillez fournir une raison.");
-      return;
-    }
+    setIsLoading(true);
+    setError("");
 
-    setSubmitting(true);
     try {
-      await onSubmit(selectedProduct, parsedQuantity, reason);
-      Alert.alert("Succès", `${actionName} effectuée avec succès.`);
+      await onSubmit(productId, quantityNum, reason);
+      setSuccess(true);
       // Reset form
-      setSelectedProduct("");
-      setQuantity("1");
+      setProductId("");
+      setQuantity("");
       setReason("");
 
-      // Refresh products to get updated quantities
-      fetchProducts();
-    } catch (error: any) {
-      console.error(`Error ${actionName}:`, error);
-      Alert.alert(
-        "Erreur",
-        error.message || `Impossible de ${actionName.toLowerCase()} le stock.`
-      );
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setSuccess(false);
+      }, 3000);
+    } catch (err) {
+      setError("Une erreur est survenue. Veuillez réessayer.");
+      console.error(err);
     } finally {
-      setSubmitting(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.container}
-      >
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <View style={{ width: 24 }} />
-        </View>
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>{title}</Text>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          {loading ? (
-            <ActivityIndicator size="large" color={actionColor} />
-          ) : (
-            <>
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Produit</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={selectedProduct}
-                    onValueChange={(itemValue) =>
-                      setSelectedProduct(itemValue.toString())
-                    }
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="Sélectionner un produit" value="" />
-                    {products.map((product) => (
-                      <Picker.Item
-                        key={product._id}
-                        label={`${product.name} - ${product.stocks.reduce(
-                          (sum, stock) => sum + stock.quantity,
-                          0
-                        )} en stock`}
-                        value={product._id}
-                      />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
+      <BarcodeScanner onBarcodeScanned={handleBarcodeScanned} />
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Quantité</Text>
-                <TextInput
-                  style={styles.input}
-                  value={quantity}
-                  onChangeText={setQuantity}
-                  keyboardType="numeric"
-                  placeholder="Entrer la quantité"
-                />
-              </View>
+      <Text style={styles.label}>ID Produit</Text>
+      <TextInput
+        style={styles.input}
+        value={productId}
+        onChangeText={setProductId}
+        placeholder="Entrez l'ID du produit"
+      />
 
-              <View style={styles.formGroup}>
-                <Text style={styles.label}>Raison</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={reason}
-                  onChangeText={setReason}
-                  placeholder="Entrer la raison"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
+      <Text style={styles.label}>Quantité</Text>
+      <TextInput
+        style={styles.input}
+        value={quantity}
+        onChangeText={setQuantity}
+        placeholder={`Quantité à ${isDecrement ? "retirer" : "ajouter"}`}
+        keyboardType="numeric"
+      />
 
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  { backgroundColor: actionColor },
-                  submitting && styles.disabledButton,
-                ]}
-                onPress={handleSubmit}
-                disabled={submitting}
-              >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>{buttonText}</Text>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Text style={styles.label}>Raison</Text>
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        value={reason}
+        onChangeText={setReason}
+        placeholder={`Raison de ${actionName.toLowerCase()}`}
+        multiline
+      />
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {success ? (
+        <Text style={styles.successText}>
+          {actionName} effectué avec succès!
+        </Text>
+      ) : null}
+
+      <Button
+        title={isLoading ? "Traitement en cours..." : buttonText}
+        onPress={handleSubmit}
+        disabled={isLoading}
+        color={actionColor}
+      />
+    </ScrollView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
   container: {
-    flex: 1,
+    padding: 20,
   },
-  header: {
-    backgroundColor: "#3498db",
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
+  title: {
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#fff",
-    textAlign: "center",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  formGroup: {
     marginBottom: 20,
+    textAlign: "center",
   },
   label: {
     fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: "#333",
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "#fff",
-  },
-  picker: {
-    height: 50,
+    marginBottom: 5,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: "#fff",
+    borderColor: "#ccc",
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
   },
   textArea: {
-    minHeight: 100,
+    height: 100,
     textAlignVertical: "top",
   },
-  submitButton: {
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+  errorText: {
+    color: "red",
+    marginBottom: 15,
   },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  disabledButton: {
-    opacity: 0.7,
+  successText: {
+    color: "green",
+    marginBottom: 15,
   },
 });
+
+export default StockActionBase;

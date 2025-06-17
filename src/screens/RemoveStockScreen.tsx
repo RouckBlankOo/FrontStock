@@ -7,17 +7,19 @@ import { removeStock } from "../services/api";
 export default function RemoveStockScreen() {
   const handleRemoveStock = async (
     productId: string,
+    color: string,
+    size: string,
     quantity: number,
     reason: string
   ) => {
-    await removeStock(productId, { quantity, reason });
+    await removeStock(productId, { color, size, quantity, reason });
   };
 
   return (
     <StockActionBase
       title="Retirer du Stock"
       actionName="Retrait"
-      actionColor={theme.colors.danger}
+      actionColor={theme.colors.error}
       buttonText="Retirer du Stock"
       onSubmit={handleRemoveStock}
       isDecrement={true}

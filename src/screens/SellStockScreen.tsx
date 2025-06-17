@@ -7,10 +7,12 @@ import { sellStock } from "../services/api";
 export default function SellStockScreen() {
   const handleSellStock = async (
     productId: string,
+    color: string,
+    size: string,
     quantity: number,
     reason: string
   ) => {
-    await sellStock(productId, { quantity, reason });
+    await sellStock(productId, { color, size, quantity, reason });
   };
 
   return (
