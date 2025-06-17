@@ -16,21 +16,3 @@ export type RootStackParamList = {
   UpdateStockScreen: undefined; // Added UpdateStockScreen
   StockActionMenu: undefined; // Added StockActionMenu
 };
-
-export interface User {
-  id: string;
-  email: string;
-  role: 'admin' | 'caissier';
-}
-
-export interface Product {
-  id: string;
-  name: string;
-  barcode: string;
-  category: string;
-  subCategory: string; // Changed from type to subCategory
-  color: string;
-  size: string;
-  quantity: number;
-  price: number;
-}

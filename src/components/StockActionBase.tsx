@@ -1,13 +1,7 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  Button,
-  StyleSheet,
-  ScrollView,
-} from "react-native";
+import { Text, TextInput, Button, StyleSheet, View } from "react-native";
 import BarcodeScanner from "./BarcodeScanner";
+import ProductSelector from "./ProductSelector";
 
 interface StockActionBaseProps {
   title: string;
@@ -39,6 +33,10 @@ const StockActionBase = ({
 
   const handleBarcodeScanned = (value: string) => {
     setProductId(value);
+  };
+
+  const handleProductSelected = (id: string) => {
+    setProductId(id);
   };
 
   const handleSubmit = async () => {
@@ -77,17 +75,14 @@ const StockActionBase = ({
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
 
       <BarcodeScanner onBarcodeScanned={handleBarcodeScanned} />
 
-      <Text style={styles.label}>ID Produit</Text>
-      <TextInput
-        style={styles.input}
-        value={productId}
-        onChangeText={setProductId}
-        placeholder="Entrez l'ID du produit"
+      <ProductSelector
+        selectedProductId={productId}
+        onProductSelected={handleProductSelected}
       />
 
       <Text style={styles.label}>Quantité</Text>
@@ -97,15 +92,6 @@ const StockActionBase = ({
         onChangeText={setQuantity}
         placeholder={`Quantité à ${isDecrement ? "retirer" : "ajouter"}`}
         keyboardType="numeric"
-      />
-
-      <Text style={styles.label}>Raison</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        value={reason}
-        onChangeText={setReason}
-        placeholder={`Raison de ${actionName.toLowerCase()}`}
-        multiline
       />
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -121,7 +107,7 @@ const StockActionBase = ({
         disabled={isLoading}
         color={actionColor}
       />
-    </ScrollView>
+    </View>
   );
 };
 

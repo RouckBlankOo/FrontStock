@@ -29,13 +29,15 @@ export interface ProductStock {
 }
 
 export interface Product {
-  _id: string;
+  _id: string; // Changed from id to _id to match your backend
   name: string;
   category: string; // Category ID
   subCategory: string; // SubCategory ID
   description?: string;
   price: number;
   stocks: ProductStock[];
+  sku?: string;
+  quantity?: number; // Added for compatibility with product selector
 }
 
 export interface ApiResponse<T> {
@@ -60,6 +62,21 @@ export interface SubCategoriesResponse {
   total: number;
   totalPages: number;
   subCategories: SubCategory[];
+}
+
+// Pagination response type - updated to match your backend
+export interface PaginatedResponse<T> {
+  data: T[];
+  page: number;      // Changed from currentPage to page
+  size: number;      // Added to match your backend
+  total: number;     // Changed from totalItems to total
+  totalPages: number;
+}
+
+// Stock operation types
+interface StockOperation {
+  quantity: number;
+  reason: string;
 }
 
 const API_URL = CONSTANTS.API_URL_PROD;
@@ -148,8 +165,31 @@ export const createCategory = (payload: { name: string }) =>
 export const createSubCategory = (payload: { name: string; category: string }) =>
   api.post<ApiResponse<SubCategory>>("/category/subcategories", payload);
 
-// Product APIs
-export const getProducts = () => api.get<ApiResponse<Product[]>>("/product");
+// Update just this function in your api.ts file:
+
+// Update just this function in your api.ts file:
+
+// Update just this function in your api.ts file:
+
+export const getProducts = (params?: {
+  name?: string;
+  category?: string;
+  subCategory?: string;
+  color?: string;
+  size?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  order?: 'asc' | 'desc';
+}) => {
+  return api.get<ApiResponse<{
+    products: Product[];
+    page: number;
+    size: number;
+    total: number;
+    totalPages: number;
+  }>>("/product/get-products", { params }); // Changed from /product/all to /product/get-products
+};
 
 export const addProduct = (product: {
   name: string;
@@ -175,8 +215,7 @@ export const getProfit = () => api.get<ApiResponse<number>>("/stats/profit");
 
 export const getStockHistory = () => api.get<ApiResponse<any>>("/stats/stock-history");
 
-// Add these functions to your api.ts file
-
+// Stock management functions
 export const addStock = (productId: string, payload: { quantity: number; reason: string }) =>
   api.post<ApiResponse<any>>(`/product/${productId}/add-stock`, payload);
 
