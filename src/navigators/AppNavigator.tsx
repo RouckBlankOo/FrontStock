@@ -16,6 +16,7 @@ import RemoveStockScreen from "../screens/RemoveStockScreen";
 import SellStockScreen from "../screens/SellStockScreen";
 import ReturnStockScreen from "../screens/ReturnStockScreen";
 import UpdateStockScreen from "../screens/UpdateStockScreen";
+import StockScreen from "../screens/StockScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -38,6 +39,7 @@ export default function AppNavigator() {
           name="FianancialAnalytics"
           component={FianancialAnalytics}
         />
+        <Stack.Screen name="StockScreen" component={StockScreen} />
         <Stack.Screen name="AddStockScreen" component={AddStockScreen} />
         <Stack.Screen name="RemoveStockScreen" component={RemoveStockScreen} />
         <Stack.Screen name="SellStockScreen" component={SellStockScreen} />

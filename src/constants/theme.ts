@@ -9,12 +9,21 @@ export const theme = {
     textSecondary: "#6B7280", // Lighter gray for secondary text
     inputBackground: "#FFFFFF", // White for input fields
     inputBorder: "#D1D5DB", // Light gray for input borders
-    error: "#EF4444", // Red for errors
+    error: "#EF4444",
+    surface: "#ffffff",
+ // Red for errors
     success: "#10B981", // Green for success
     white: "#FFFFFF",
     black: "#000000",
     modalOverlay: "rgba(0, 0, 0, 0.5)", // Semi-transparent black for modals
     cardBackground: "#FFFFFF", // White for cards
+    lightPrimary: '#e1f0fa',
+    errorLight: '#fde8e6',
+    successLight: '#e8f8f0',
+    grey: '#95a5a6',
+    lightGrey: '#ecf0f1',
+    border: '#dfe6e9',
+    shadow: '#000',
     // Integrate product colors for product selection
     productColors: productColors.reduce(
       (acc, color) => ({ ...acc, [color.name.toLowerCase()]: color.value }),

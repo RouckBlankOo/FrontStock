@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,317 +6,864 @@ import {
   FlatList,
   TouchableOpacity,
   Animated,
-  SafeAreaView,
   Platform,
   useWindowDimensions,
-  ScrollView,
+  ActivityIndicator,
+  TextInput,
+  Modal,
+  RefreshControl,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import ModalComponent from "react-native-modal";
-import { SafeAreaView as SafeAreaViewContext } from "react-native-safe-area-context";
-import StockActionMenu from "../components/StockActionMenu";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { theme } from "../constants/theme";
 import { RootStackParamList } from "../types";
 import { productColors } from "../constants/colors";
+import {
+  getProducts,
+  getCategories,
+  getSubCategories,
+  updateProductStock,
+  Product,
+  Category,
+  SubCategory,
+} from "../services/api";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const user = {
-  email: "demo@stoky.com",
-  role: "administrateur",
-};
-
-const products = [
-  {
-    id: "1",
-    name: "Veste",
-    category: "Chemise",
-    quantity: 50,
-    subCategory: "Polo",
-    color: "Marron",
-    size: "Moyen",
-  },
-  {
-    id: "2",
-    name: "Chaussures",
-    category: "Chemise",
-    quantity: 20,
-    subCategory: "T-Shirt",
-    color: "Blanc",
-    size: "Grand",
-  },
-  {
-    id: "3",
-    name: "Pantalon",
-    category: "Pantalon",
-    quantity: 15,
-    subCategory: "Jeans",
-    color: "Bleu",
-    size: "Petit",
-  },
-];
-
-// Utiliser la palette de couleurs partagée partout
-const colors = productColors;
+interface StockDisplayItem {
+  _id: string;
+  productId: string;
+  stockId: string;
+  productName: string;
+  category: string;
+  subCategory: string;
+  price: number;
+  color: string;
+  size: string;
+  quantity: number;
+}
 
 export default function HomeScreen() {
+  console.log("HomeScreen - Component initialized");
+
   const navigation = useNavigation<NavigationProp>();
+  const isFocused = useIsFocused();
   const [menuVisible, setMenuVisible] = useState(false);
-  const [stockMenuVisible, setStockMenuVisible] = useState(false);
-  const menuAnim = useState(new Animated.Value(0))[0];
+  const menuAnim = useRef(new Animated.Value(0)).current;
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [stockItems, setStockItems] = useState<StockDisplayItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<StockDisplayItem | null>(
+    null
+  );
+  const [itemDetailVisible, setItemDetailVisible] = useState(false);
+  const [stockUpdateModalVisible, setStockUpdateModalVisible] = useState(false);
+  const [quantityInput, setQuantityInput] = useState("");
+  const [updateAction, setUpdateAction] = useState<"add" | "remove" | "sell">(
+    "add"
+  );
+  const [updatingStock, setUpdatingStock] = useState(false);
 
-  const [filterVisible, setFilterVisible] = useState(false);
-  const [filter, setFilter] = useState({
-    category: "",
-    subCategory: "",
-    color: "",
-    size: "",
-  });
-
-  // États des modals de filtrage
-  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  const [subCategoryModalVisible, setSubCategoryModalVisible] = useState(false);
-  const [sizeModalVisible, setSizeModalVisible] = useState(false);
+  // Column sorting
+  const [sortBy, setSortBy] = useState<keyof StockDisplayItem>("productName");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const { width } = useWindowDimensions();
 
-  const categories = ["Chaussures", "Chemise", "Pantalon", "Veste"];
-  const subCategories: { [key: string]: string[] } = {
-    Chaussures: ["Baskets", "Bottes", "Sandales"],
-    Chemise: ["T-Shirt", "Polo", "Pull"],
-    Pantalon: ["Jeans", "Chinos", "Short"],
-    Veste: ["Blazer", "Hoodie", "Manteau"],
-  };
-  const sizes = ["XS", "S", "M", "L", "XL", "Petit", "Moyen", "Grand"];
-  const subCategoryOptions =
-    filter.category && subCategories[filter.category]
-      ? subCategories[filter.category]
-      : [];
+  // Reset menu state when screen comes into focus
+  useEffect(() => {
+    console.log("HomeScreen - Screen focus changed:", isFocused);
+    if (isFocused) {
+      setMenuVisible(false);
+    }
+  }, [isFocused]);
 
-  const colorScales = useMemo(
-    () =>
-      colors.reduce((acc, c) => {
-        acc[c.name] = new Animated.Value(1);
-        return acc;
-      }, {} as { [key: string]: Animated.Value }),
-    [colors]
-  );
-
-  const animateColorPress = (colorName: string) => {
-    Animated.sequence([
-      Animated.timing(colorScales[colorName], {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(colorScales[colorName], {
-        toValue: 1.1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(colorScales[colorName], {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const renderDropdownItem = ({
-    item,
-    onPress,
-  }: {
-    item: string;
-    onPress: (value: string) => void;
-  }) => (
-    <TouchableOpacity
-      style={styles.dropdownItem}
-      onPress={() => onPress(item)}
-      accessibilityLabel={`Sélectionner ${item}`}
-    >
-      <Text style={styles.dropdownItemText}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  const toggleMenu = () => {
-    setMenuVisible((prev) => !prev);
+  // Handle animation separately from state changes to avoid insertion effect errors
+  useEffect(() => {
+    console.log("HomeScreen - Menu visibility changed:", menuVisible);
     Animated.timing(menuAnim, {
-      toValue: menuVisible ? 0 : 1,
+      toValue: menuVisible ? 1 : 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  };
+  }, [menuVisible, menuAnim]);
+
+  // Fetch products on load
+  useEffect(() => {
+    console.log("HomeScreen - Initial data fetch");
+    fetchData();
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    console.log("HomeScreen - fetchData - Starting data fetch...");
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Fetch products and categories in parallel
+      console.log(
+        "HomeScreen - fetchData - Fetching products and categories..."
+      );
+      const [productsRes, categoriesRes] = await Promise.all([
+        getProducts(),
+        getCategories(),
+      ]);
+
+      console.log(
+        "HomeScreen - fetchData - Products response:",
+        productsRes.data
+      );
+      console.log(
+        "HomeScreen - fetchData - Categories response:",
+        categoriesRes.data
+      );
+
+      if (!productsRes.data.success || !categoriesRes.data.success) {
+        throw new Error("Failed to fetch data");
+      }
+
+      const productsData = productsRes.data.data.products || [];
+      const categoriesData = categoriesRes.data.data.categories || [];
+
+      console.log(
+        "HomeScreen - fetchData - Products data count:",
+        productsData.length
+      );
+      console.log(
+        "HomeScreen - fetchData - Categories data count:",
+        categoriesData.length
+      );
+
+      setProducts(productsData);
+      setCategories(categoriesData);
+
+      // Fetch subcategories for each category
+      if (categoriesData.length > 0) {
+        console.log("HomeScreen - fetchData - Fetching subcategories...");
+        const subCategoriesPromises = categoriesData.map(
+          (category: Category) => {
+            console.log(
+              "HomeScreen - fetchData - Fetching subcategories for category:",
+              category._id
+            );
+            return getSubCategories({ category: category._id });
+          }
+        );
+
+        const subCategoriesResponses = await Promise.all(subCategoriesPromises);
+        const allSubCategories = subCategoriesResponses.flatMap((response) => {
+          if (response.data.success) {
+            return response.data.data.subCategories || [];
+          }
+          return [];
+        });
+
+        console.log(
+          "HomeScreen - fetchData - All subcategories count:",
+          allSubCategories.length
+        );
+        setSubCategories(allSubCategories);
+
+        // Transform products to flat stock items for display
+        const stockDisplayItems = transformProductsToStockItems(
+          productsData,
+          categoriesData,
+          allSubCategories
+        );
+
+        console.log(
+          "HomeScreen - fetchData - Stock display items count:",
+          stockDisplayItems.length
+        );
+        setStockItems(stockDisplayItems);
+      } else {
+        console.log(
+          "HomeScreen - fetchData - No categories, transforming without subcategories"
+        );
+        // No categories, just transform products with empty subcategories
+        const stockDisplayItems = transformProductsToStockItems(
+          productsData,
+          categoriesData,
+          []
+        );
+        setStockItems(stockDisplayItems);
+      }
+    } catch (error: any) {
+      console.error("HomeScreen - fetchData - Error:", error);
+      console.error("HomeScreen - fetchData - Error message:", error.message);
+      console.error(
+        "HomeScreen - fetchData - Error response:",
+        error.response?.data
+      );
+      setError(
+        error.message ||
+          "Une erreur est survenue lors du chargement des données"
+      );
+    } finally {
+      console.log("HomeScreen - fetchData - Completed");
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    console.log("HomeScreen - onRefresh - Refreshing data");
+    setRefreshing(true);
+    fetchData();
+  }, [fetchData]);
+
+  // Transform products data to flat stock items for display
+  const transformProductsToStockItems = useCallback(
+    (
+      products: Product[],
+      categories: Category[],
+      subCategories: SubCategory[]
+    ): StockDisplayItem[] => {
+      console.log(
+        "HomeScreen - transformProductsToStockItems - Starting transformation"
+      );
+      console.log(
+        "HomeScreen - transformProductsToStockItems - Products:",
+        products.length
+      );
+      console.log(
+        "HomeScreen - transformProductsToStockItems - Categories:",
+        categories.length
+      );
+      console.log(
+        "HomeScreen - transformProductsToStockItems - SubCategories:",
+        subCategories.length
+      );
+
+      const categoryMap = new Map<string, string>();
+      categories.forEach((cat) => {
+        categoryMap.set(cat._id, cat.name);
+        console.log(
+          "HomeScreen - transformProductsToStockItems - Category mapping:",
+          cat._id,
+          "->",
+          cat.name
+        );
+      });
+
+      const subCategoryMap = new Map<string, string>();
+      subCategories.forEach((subCat) => {
+        subCategoryMap.set(subCat._id, subCat.name);
+        console.log(
+          "HomeScreen - transformProductsToStockItems - SubCategory mapping:",
+          subCat._id,
+          "->",
+          subCat.name
+        );
+      });
+
+      const stockItems: StockDisplayItem[] = [];
+
+      products.forEach((product, productIndex) => {
+        console.log(
+          `HomeScreen - transformProductsToStockItems - Processing product ${
+            productIndex + 1
+          }:`,
+          {
+            id: product._id,
+            name: product.name,
+            stocksCount: product.stocks?.length || 0,
+            categoryId: product.category,
+            subCategoryId: product.subCategory,
+          }
+        );
+
+        // Skip products without stocks
+        if (!product.stocks || product.stocks.length === 0) {
+          console.log(
+            "HomeScreen - transformProductsToStockItems - Skipping product without stocks:",
+            product.name
+          );
+          return;
+        }
+
+        const categoryId =
+          typeof product.category === "string"
+            ? product.category
+            : (product.category as any)?._id;
+        const subCategoryId =
+          typeof product.subCategory === "string"
+            ? product.subCategory
+            : (product.subCategory as any)?._id;
+
+        const categoryName =
+          categoryMap.get(categoryId) || "Catégorie inconnue";
+        const subCategoryName =
+          subCategoryMap.get(subCategoryId) || "Sous-catégorie inconnue";
+
+        console.log(
+          "HomeScreen - transformProductsToStockItems - Resolved names:",
+          {
+            categoryName,
+            subCategoryName,
+          }
+        );
+
+        // Create a stock item for each color/size combination
+        product.stocks.forEach((stock, stockIndex) => {
+          const stockItem: StockDisplayItem = {
+            _id: `${product._id}-${stock.color}-${stock.size}`,
+            productId: product._id,
+            stockId: stock._id, // Individual stock ID
+            productName: product.name,
+            category: categoryName,
+            subCategory: subCategoryName,
+            price: product.price,
+            color: stock.color,
+            size: stock.size,
+            quantity: stock.quantity,
+          };
+
+          console.log(
+            `HomeScreen - transformProductsToStockItems - Stock item ${
+              stockIndex + 1
+            }:`,
+            {
+              displayId: stockItem._id,
+              productId: stockItem.productId,
+              stockId: stockItem.stockId,
+              productName: stockItem.productName,
+              color: stock.color,
+              size: stock.size,
+              quantity: stock.quantity,
+            }
+          );
+
+          stockItems.push(stockItem);
+        });
+      });
+
+      console.log(
+        "HomeScreen - transformProductsToStockItems - Total stock items created:",
+        stockItems.length
+      );
+      return stockItems;
+    },
+    []
+  );
+
+  // Filter stock items based on search query
+  const filteredStockItems = stockItems.filter((item) => {
+    const query = searchQuery.toLowerCase();
+    const matches =
+      item.productName.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query) ||
+      item.subCategory.toLowerCase().includes(query) ||
+      item.color.toLowerCase().includes(query) ||
+      item.size.toLowerCase().includes(query);
+
+    if (searchQuery && matches) {
+      console.log("HomeScreen - filteredStockItems - Item matches search:", {
+        query,
+        item: item.productName,
+        color: item.color,
+        size: item.size,
+      });
+    }
+
+    return matches;
+  });
+
+  // Sort stock items
+  const sortedStockItems = [...filteredStockItems].sort((a, b) => {
+    if (!sortBy) return 0;
+
+    const valueA = a[sortBy];
+    const valueB = b[sortBy];
+
+    if (typeof valueA === "string" && typeof valueB === "string") {
+      return sortOrder === "asc"
+        ? valueA.localeCompare(valueB)
+        : valueB.localeCompare(valueA);
+    }
+
+    // For numeric values
+    if (valueA < valueB) return sortOrder === "asc" ? -1 : 1;
+    if (valueA > valueB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const handleSort = useCallback(
+    (column: keyof StockDisplayItem) => {
+      console.log("HomeScreen - handleSort - Column clicked:", column);
+      console.log("HomeScreen - handleSort - Current sort:", {
+        sortBy,
+        sortOrder,
+      });
+
+      if (sortBy === column) {
+        // Toggle sort order if same column clicked
+        const newOrder = sortOrder === "asc" ? "desc" : "asc";
+        console.log("HomeScreen - handleSort - Toggling order to:", newOrder);
+        setSortOrder(newOrder);
+      } else {
+        // New column, default to ascending
+        console.log("HomeScreen - handleSort - New column, setting to asc");
+        setSortBy(column);
+        setSortOrder("asc");
+      }
+    },
+    [sortBy, sortOrder]
+  );
+
+  // Menu toggle with useCallback to prevent re-renders
+  const toggleMenu = useCallback(() => {
+    console.log("HomeScreen - toggleMenu - Current visibility:", menuVisible);
+    setMenuVisible((prev) => !prev);
+  }, [menuVisible]);
 
   const menuTranslateY = menuAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [200, 0],
   });
 
-  const navigateTo = (screen: keyof RootStackParamList) => {
-    navigation.navigate(screen);
-  };
+  // Navigation function with useCallback to prevent re-renders
+  const navigateTo = useCallback(
+    (screen: keyof RootStackParamList) => {
+      console.log("HomeScreen - navigateTo - Screen:", screen);
+      // First hide the menu
+      setMenuVisible(false);
 
-  const handleLogout = () => {
-    navigation.replace("Login");
-  };
-
-  // Logique de filtrage
-  const filteredProducts = products.filter((p) => {
-    return (
-      (!filter.category ||
-        p.category.toLowerCase().includes(filter.category.toLowerCase())) &&
-      (!filter.subCategory ||
-        (p.subCategory &&
-          p.subCategory
-            .toLowerCase()
-            .includes(filter.subCategory.toLowerCase()))) &&
-      (!filter.color ||
-        (p.color &&
-          p.color.toLowerCase().includes(filter.color.toLowerCase()))) &&
-      (!filter.size ||
-        (p.size && p.size.toLowerCase().includes(filter.size.toLowerCase())))
-    );
-  });
-
-  // Rendu du tableau (sans colonne nom, couleur en cercle)
-  const renderProduct = ({ item }: { item: (typeof products)[0] }) => (
-    <View style={styles.tableRow}>
-      <Text
-        style={[styles.cell, styles.categoryCell]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {item.category}
-      </Text>
-      <Text
-        style={[styles.cell, styles.subCategoryCell]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {item.subCategory}
-      </Text>
-      <View
-        style={[
-          styles.cell,
-          styles.colorCell,
-          { justifyContent: "center", alignItems: "center" },
-        ]}
-      >
-        <View
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 9,
-            backgroundColor:
-              colors.find(
-                (c) => c.name.toLowerCase() === item.color.toLowerCase()
-              )?.value || "#ccc",
-            borderWidth: 1,
-            borderColor: "#ddd",
-            alignSelf: "center",
-          }}
-        />
-      </View>
-      <Text
-        style={[styles.cell, styles.sizeCell]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {item.size}
-      </Text>
-      <Text
-        style={[styles.cell, styles.qtyCell]}
-        numberOfLines={1}
-        ellipsizeMode="tail"
-      >
-        {item.quantity}
-      </Text>
-    </View>
+      // Use a timeout to ensure state update completes before navigation
+      setTimeout(() => {
+        console.log("HomeScreen - navigateTo - Navigating to:", screen);
+        navigation.navigate(screen);
+      }, 300); // Match animation duration
+    },
+    [navigation]
   );
 
-  // Largeur du modal responsive
-  const modalWidth = width > 500 ? 400 : width * 0.95;
+  const handleItemPress = useCallback((item: StockDisplayItem) => {
+    console.log("HomeScreen - handleItemPress - Item selected:", {
+      displayId: item._id,
+      productId: item.productId,
+      stockId: item.stockId,
+      productName: item.productName,
+      color: item.color,
+      size: item.size,
+      quantity: item.quantity,
+    });
+    setSelectedItem(item);
+    setItemDetailVisible(true);
+  }, []);
 
-  return (
-    <SafeAreaViewContext style={styles.container}>
-      <ScrollView>
-        <View style={styles.header}>
-          <Ionicons
-            name="home-outline"
-            size={Math.max(24, width * 0.08)}
-            color={theme.colors.primary}
-          />
-          <View>
-            <Text
-              style={[styles.title, { fontSize: Math.max(16, width * 0.045) }]}
-            >
-              Bienvenue, {user.email}
-            </Text>
+  const getStatusColor = useCallback((quantity: number) => {
+    if (quantity <= 0) return theme.colors.error;
+    if (quantity <= 5) return "#FFA500"; // Orange for low stock
+    return theme.colors.success;
+  }, []);
+
+  // Handle stock update
+  const handleStockUpdate = useCallback(async () => {
+    console.log("HomeScreen - handleStockUpdate - Starting stock update");
+    console.log(
+      "HomeScreen - handleStockUpdate - Selected item:",
+      selectedItem
+    );
+    console.log(
+      "HomeScreen - handleStockUpdate - Quantity input:",
+      quantityInput
+    );
+    console.log(
+      "HomeScreen - handleStockUpdate - Update action:",
+      updateAction
+    );
+
+    if (!selectedItem || !quantityInput.trim()) {
+      console.log(
+        "HomeScreen - handleStockUpdate - Missing selected item or quantity"
+      );
+      Alert.alert("Erreur", "Veuillez entrer une quantité valide");
+      return;
+    }
+
+    const quantity = parseInt(quantityInput);
+    console.log("HomeScreen - handleStockUpdate - Parsed quantity:", quantity);
+
+    if (isNaN(quantity) || quantity <= 0) {
+      console.log("HomeScreen - handleStockUpdate - Invalid quantity");
+      Alert.alert("Erreur", "Veuillez entrer un nombre positif");
+      return;
+    }
+
+    // For remove and sell actions, ensure we don't go below 0
+    if (
+      (updateAction === "remove" || updateAction === "sell") &&
+      quantity > selectedItem.quantity
+    ) {
+      console.log("HomeScreen - handleStockUpdate - Insufficient stock");
+      Alert.alert(
+        "Erreur",
+        `Impossible de ${
+          updateAction === "sell" ? "vendre" : "retirer"
+        } ${quantity} articles. Stock disponible: ${selectedItem.quantity}`
+      );
+      return;
+    }
+
+    setUpdatingStock(true);
+    console.log("HomeScreen - handleStockUpdate - Update started");
+
+    try {
+      console.log(
+        "HomeScreen - handleStockUpdate - Calling API with stock ID:",
+        selectedItem.stockId
+      );
+
+      const response = await updateProductStock(selectedItem.stockId, {
+        quantityChange: quantity,
+        action: updateAction,
+      });
+
+      console.log(
+        "HomeScreen - handleStockUpdate - API Response:",
+        response.data
+      );
+
+      if (response.data.success) {
+        console.log("HomeScreen - handleStockUpdate - Update successful");
+        Alert.alert(
+          "Succès",
+          `Stock ${
+            updateAction === "add"
+              ? "ajouté"
+              : updateAction === "sell"
+              ? "vendu"
+              : "retiré"
+          } avec succès`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                console.log(
+                  "HomeScreen - handleStockUpdate - Closing modals and refreshing"
+                );
+                setStockUpdateModalVisible(false);
+                setItemDetailVisible(false);
+                setQuantityInput("");
+                // Refresh data to show updated stock
+                fetchData();
+              },
+            },
+          ]
+        );
+      } else {
+        console.log("HomeScreen - handleStockUpdate - API returned failure");
+        throw new Error(
+          response.data.message || "Erreur lors de la mise à jour"
+        );
+      }
+    } catch (error: any) {
+      console.error("HomeScreen - handleStockUpdate - Error:", error);
+      console.error(
+        "HomeScreen - handleStockUpdate - Error response:",
+        error.response?.data
+      );
+      console.error(
+        "HomeScreen - handleStockUpdate - Error status:",
+        error.response?.status
+      );
+
+      let errorMessage = "Erreur lors de la mise à jour du stock";
+
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      // Add specific error for 404
+      if (error.response?.status === 404) {
+        errorMessage = `Stock non trouvé. Le produit a peut-être été modifié ou supprimé.`;
+      }
+
+      console.log(
+        "HomeScreen - handleStockUpdate - Final error message:",
+        errorMessage
+      );
+      Alert.alert("Erreur", errorMessage);
+    } finally {
+      console.log("HomeScreen - handleStockUpdate - Update completed");
+      setUpdatingStock(false);
+    }
+  }, [selectedItem, quantityInput, updateAction, fetchData]);
+
+  const renderStockItem = useCallback(
+    ({ item }: { item: StockDisplayItem }) => {
+      const colorObj = productColors.find(
+        (c) => c.name.toLowerCase() === item.color.toLowerCase()
+      );
+
+      return (
+        <TouchableOpacity
+          style={styles.stockItem}
+          onPress={() => handleItemPress(item)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.stockInfo}>
+            <Text style={styles.productName}>{item.productName}</Text>
+            <View style={styles.stockDetails}>
+              <View style={styles.stockProperty}>
+                <Text style={styles.propertyLabel}>Catégorie:</Text>
+                <Text style={styles.propertyValue}>{item.category}</Text>
+              </View>
+              <View style={styles.stockProperty}>
+                <Text style={styles.propertyLabel}>Sous-cat:</Text>
+                <Text style={styles.propertyValue}>{item.subCategory}</Text>
+              </View>
+            </View>
+            <View style={styles.stockDetails}>
+              <View style={styles.stockProperty}>
+                <Text style={styles.propertyLabel}>Couleur:</Text>
+                <View style={styles.colorContainer}>
+                  <Text style={styles.propertyValue}>{item.color}</Text>
+                  <View
+                    style={[
+                      styles.colorCircle,
+                      { backgroundColor: colorObj?.value || "#ccc" },
+                    ]}
+                  />
+                </View>
+              </View>
+              <View style={styles.stockProperty}>
+                <Text style={styles.propertyLabel}>Taille:</Text>
+                <Text style={styles.propertyValue}>{item.size}</Text>
+              </View>
+              <View style={styles.stockProperty}>
+                <Text style={styles.propertyLabel}>Prix:</Text>
+                <Text style={styles.propertyValue}>{item.price}€</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.quantityContainer}>
+            <Text style={styles.quantityLabel}>Quantité</Text>
             <Text
               style={[
-                styles.subtitle,
-                { fontSize: Math.max(12, width * 0.035) },
+                styles.quantity,
+                { color: getStatusColor(item.quantity) },
               ]}
             >
-              Rôle : {user.role}
+              {item.quantity}
             </Text>
           </View>
+        </TouchableOpacity>
+      );
+    },
+    [handleItemPress, getStatusColor]
+  );
+
+  // Open stock update modal with specific action
+  const openStockUpdateModal = useCallback(
+    (action: "add" | "remove" | "sell") => {
+      console.log("HomeScreen - openStockUpdateModal - Action:", action);
+      setUpdateAction(action);
+      setQuantityInput("");
+      setItemDetailVisible(false);
+      setStockUpdateModalVisible(true);
+    },
+    []
+  );
+
+  console.log("HomeScreen - Render - Current state:", {
+    loading,
+    error,
+    stockItemsCount: stockItems.length,
+    filteredItemsCount: filteredStockItems.length,
+    sortedItemsCount: sortedStockItems.length,
+    searchQuery,
+    sortBy,
+    sortOrder,
+  });
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Ionicons name="home-outline" size={24} color={theme.colors.primary} />
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title}>Inventaire Stoky</Text>
+          <Text style={styles.subtitle}>
+            {sortedStockItems.length} produits en stock
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search-outline"
+          size={20}
+          color={theme.colors.textSecondary}
+          style={styles.searchIcon}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Rechercher un produit..."
+          value={searchQuery}
+          onChangeText={(text) => {
+            console.log("HomeScreen - Search query changed:", text);
+            setSearchQuery(text);
+          }}
+          placeholderTextColor={theme.colors.textSecondary}
+        />
+        {searchQuery ? (
           <TouchableOpacity
-            style={styles.filterButton}
-            onPress={() => setFilterVisible(true)}
+            style={styles.clearButton}
+            onPress={() => {
+              console.log("HomeScreen - Clearing search query");
+              setSearchQuery("");
+            }}
           >
             <Ionicons
-              name="filter-outline"
-              size={Math.max(24, width * 0.07)}
-              color={theme.colors.primary}
+              name="close-circle"
+              size={20}
+              color={theme.colors.textSecondary}
             />
           </TouchableOpacity>
-        </View>
+        ) : null}
+      </View>
 
-        <View style={styles.tableContainer}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.headerCell, styles.categoryCell]}>
-              Catégorie
+      <View style={styles.sortContainer}>
+        <Text style={styles.sortLabel}>Trier par:</Text>
+        <View style={styles.sortOptions}>
+          <TouchableOpacity
+            style={[
+              styles.sortOption,
+              sortBy === "productName" && styles.sortOptionActive,
+            ]}
+            onPress={() => handleSort("productName")}
+          >
+            <Text
+              style={[
+                styles.sortOptionText,
+                sortBy === "productName" && styles.sortOptionTextActive,
+              ]}
+            >
+              Nom{" "}
+              {sortBy === "productName" && (sortOrder === "asc" ? "↑" : "↓")}
             </Text>
-            <Text style={[styles.headerCell, styles.subCategoryCell]}>
-              Sous-catégorie
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.sortOption,
+              sortBy === "category" && styles.sortOptionActive,
+            ]}
+            onPress={() => handleSort("category")}
+          >
+            <Text
+              style={[
+                styles.sortOptionText,
+                sortBy === "category" && styles.sortOptionTextActive,
+              ]}
+            >
+              Catégorie{" "}
+              {sortBy === "category" && (sortOrder === "asc" ? "↑" : "↓")}
             </Text>
-            <Text style={[styles.headerCell, styles.colorCell]}>Couleur</Text>
-            <Text style={[styles.headerCell, styles.sizeCell]}>Taille</Text>
-            <Text style={[styles.headerCell, styles.qtyCell]}>Qté</Text>
-          </View>
-          <FlatList
-            data={filteredProducts}
-            renderItem={renderProduct}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={
-              filteredProducts.length === 0 ? styles.emptyList : undefined
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <Ionicons
-                  name="cube-outline"
-                  size={Math.max(48, width * 0.13)}
-                  color={theme.colors.text + "80"}
-                />
-                <Text style={styles.emptyText}>Aucun produit trouvé</Text>
-                <Text style={styles.emptySubText}>
-                  Ajoutez des produits pour les voir listés ici
-                </Text>
-              </View>
-            }
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.sortOption,
+              sortBy === "quantity" && styles.sortOptionActive,
+            ]}
+            onPress={() => handleSort("quantity")}
+          >
+            <Text
+              style={[
+                styles.sortOptionText,
+                sortBy === "quantity" && styles.sortOptionTextActive,
+              ]}
+            >
+              Quantité{" "}
+              {sortBy === "quantity" && (sortOrder === "asc" ? "↑" : "↓")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {loading && !refreshing ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Chargement de l'inventaire...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.centered}>
+          <Ionicons
+            name="alert-circle-outline"
+            size={48}
+            color={theme.colors.error}
           />
+          <Text style={styles.errorText}>Erreur: {error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              console.log("HomeScreen - Retry button pressed");
+              fetchData();
+            }}
+          >
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      ) : sortedStockItems.length === 0 ? (
+        <View style={styles.centered}>
+          <Ionicons
+            name="cube-outline"
+            size={48}
+            color={theme.colors.textSecondary}
+          />
+          <Text style={styles.emptyText}>Aucun produit trouvé</Text>
+          {searchQuery ? (
+            <TouchableOpacity
+              onPress={() => {
+                console.log("HomeScreen - Clear search from empty state");
+                setSearchQuery("");
+              }}
+            >
+              <Text style={styles.clearSearchText}>Effacer la recherche</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.emptySubText}>
+              Ajoutez des produits pour les voir listés ici
+            </Text>
+          )}
+        </View>
+      ) : (
+        <FlatList
+          data={sortedStockItems}
+          renderItem={renderStockItem}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
+            />
+          }
+        />
+      )}
 
-      {/* Bouton de menu flottant */}
+      {/* Floating menu button */}
       <TouchableOpacity style={styles.menuButton} onPress={toggleMenu}>
-        <Ionicons name="menu" size={32} color={theme.colors.white} />
+        <Ionicons name="menu" size={28} color={theme.colors.white} />
       </TouchableOpacity>
 
-      {/* Menu flottant animé */}
+      {/* Animated floating menu */}
       {menuVisible && (
         <Animated.View
           style={[
@@ -329,10 +876,7 @@ export default function HomeScreen() {
         >
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("AddProduct");
-            }}
+            onPress={() => navigateTo("AddProduct")}
           >
             <Ionicons
               name="add-circle-outline"
@@ -344,10 +888,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("BarcodeScanner");
-            }}
+            onPress={() => navigateTo("BarcodeScanner")}
           >
             <Ionicons
               name="barcode-outline"
@@ -359,348 +900,312 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("DeleteArticle");
-            }}
+            onPress={() => navigateTo("SellStockScreen")}
           >
             <Ionicons
-              name="trash-outline"
+              name="cart-outline"
               size={24}
               color={theme.colors.primary}
             />
-            <Text style={styles.menuText}>Supprimer un article</Text>
+            <Text style={styles.menuText}>Vendre un article</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("AnalyticsScreen");
-            }}
-          >
-            <Ionicons name="analytics" size={24} color={theme.colors.primary} />
-            <Text style={styles.menuText}>Voir les analyses de stock</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("FianancialAnalytics");
-            }}
+            onPress={() => navigateTo("ReturnStockScreen")}
           >
             <Ionicons
-              name="stats-chart"
+              name="return-down-back-outline"
               size={24}
               color={theme.colors.primary}
             />
-            <Text style={styles.menuText}>Analyse financière</Text>
+            <Text style={styles.menuText}>Retour d'un article</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              navigateTo("AddCategory");
-            }}
+            onPress={() => navigateTo("AnalyticsScreen")}
+          >
+            <Ionicons
+              name="stats-chart-outline"
+              size={24}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.menuText}>Statistiques</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => navigateTo("AddCategory")}
           >
             <Ionicons
               name="folder-open-outline"
               size={24}
               color={theme.colors.primary}
             />
-            <Text style={styles.menuText}>Ajouter une catégorie</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              setStockMenuVisible(true);
-            }}
-          >
-            <Ionicons
-              name="cube-outline"
-              size={24}
-              color={theme.colors.primary}
-            />
-            <Text style={styles.menuText}>Gestion du stock</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => {
-              toggleMenu();
-              handleLogout();
-            }}
-          >
-            <Ionicons
-              name="log-out-outline"
-              size={24}
-              color={theme.colors.error}
-            />
-            <Text style={[styles.menuText, { color: theme.colors.error }]}>
-              Déconnexion
-            </Text>
+            <Text style={styles.menuText}>Gérer les catégories</Text>
           </TouchableOpacity>
         </Animated.View>
       )}
 
-      {/* Modal de gestion du stock */}
-      <ModalComponent
-        isVisible={stockMenuVisible}
-        onBackdropPress={() => setStockMenuVisible(false)}
-        style={styles.modal}
+      {/* Item Detail Modal */}
+      <Modal
+        visible={itemDetailVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          console.log("HomeScreen - Item detail modal closed");
+          setItemDetailVisible(false);
+        }}
       >
-        <View style={[styles.filterModal, { width: modalWidth }]}>
-          <Text style={styles.filterTitle}>Gestion du stock</Text>
-          <StockActionMenu />
-          <TouchableOpacity
-            style={styles.filterButtonModal}
-            onPress={() => setStockMenuVisible(false)}
-          >
-            <Text style={{ color: theme.colors.white, textAlign: "center" }}>
-              Fermer
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          {selectedItem && (
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {selectedItem.productName}
+                </Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => {
+                    console.log("HomeScreen - Close item detail modal");
+                    setItemDetailVisible(false);
+                  }}
+                >
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Catégorie:</Text>
+                <Text style={styles.detailValue}>{selectedItem.category}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Sous-catégorie:</Text>
+                <Text style={styles.detailValue}>
+                  {selectedItem.subCategory}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Couleur:</Text>
+                <View style={styles.colorDetailContainer}>
+                  <Text style={styles.detailValue}>{selectedItem.color}</Text>
+                  <View
+                    style={[
+                      styles.colorDetailCircle,
+                      {
+                        backgroundColor:
+                          productColors.find(
+                            (c) =>
+                              c.name.toLowerCase() ===
+                              selectedItem.color.toLowerCase()
+                          )?.value || "#ccc",
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Taille:</Text>
+                <Text style={styles.detailValue}>{selectedItem.size}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Quantité:</Text>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    { color: getStatusColor(selectedItem.quantity) },
+                  ]}
+                >
+                  {selectedItem.quantity}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Prix:</Text>
+                <Text style={styles.detailValue}>{selectedItem.price}€</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Stock ID:</Text>
+                <Text style={[styles.detailValue, styles.stockIdText]}>
+                  {selectedItem.stockId}
+                </Text>
+              </View>
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.addButton]}
+                  onPress={() => {
+                    console.log("HomeScreen - Add stock button pressed");
+                    openStockUpdateModal("add");
+                  }}
+                >
+                  <Ionicons
+                    name="add-outline"
+                    size={20}
+                    color={theme.colors.white}
+                  />
+                  <Text style={styles.actionButtonText}>Ajouter</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.sellButton]}
+                  onPress={() => {
+                    console.log("HomeScreen - Sell stock button pressed");
+                    openStockUpdateModal("sell");
+                  }}
+                >
+                  <Ionicons
+                    name="cart-outline"
+                    size={20}
+                    color={theme.colors.white}
+                  />
+                  <Text style={styles.actionButtonText}>Vendre</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.removeButton]}
+                  onPress={() => {
+                    console.log("HomeScreen - Remove stock button pressed");
+                    openStockUpdateModal("remove");
+                  }}
+                >
+                  <Ionicons
+                    name="remove-outline"
+                    size={20}
+                    color={theme.colors.white}
+                  />
+                  <Text style={styles.actionButtonText}>Retirer</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
-      </ModalComponent>
+      </Modal>
 
-      {/* Modal de filtrage */}
-      {filterVisible && (
-        <View style={styles.filterModalOverlay}>
-          <View style={[styles.filterModal, { width: modalWidth }]}>
-            <Text style={styles.filterTitle}>Filtrer les produits</Text>
-
-            {/* Menu déroulant des catégories */}
-            <View style={styles.formField}>
-              <Text style={styles.label}>Catégorie</Text>
+      {/* Stock Update Modal */}
+      <Modal
+        visible={stockUpdateModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          console.log("HomeScreen - Stock update modal closed");
+          setStockUpdateModalVisible(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {updateAction === "add"
+                  ? "Ajouter du stock"
+                  : updateAction === "sell"
+                  ? "Vendre des articles"
+                  : "Retirer du stock"}
+              </Text>
               <TouchableOpacity
-                style={styles.dropdownButton}
-                onPress={() => setCategoryModalVisible(true)}
-                accessibilityLabel="Sélectionner une catégorie"
+                style={styles.closeButton}
+                onPress={() => {
+                  console.log("HomeScreen - Close stock update modal");
+                  setStockUpdateModalVisible(false);
+                }}
               >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    !filter.category && { color: theme.colors.text + "80" },
-                  ]}
-                >
-                  {filter.category || "Sélectionnez une catégorie"}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={20}
-                  color={theme.colors.text}
-                />
+                <Ionicons name="close" size={24} color={theme.colors.text} />
               </TouchableOpacity>
-              <ModalComponent
-                isVisible={categoryModalVisible}
-                onBackdropPress={() => setCategoryModalVisible(false)}
-                style={styles.modal}
-              >
-                <View style={styles.modalContent}>
-                  <FlatList
-                    data={categories}
-                    keyExtractor={(item) => item}
-                    renderItem={({ item }) =>
-                      renderDropdownItem({
-                        item,
-                        onPress: (value) => {
-                          setFilter((f) => ({
-                            ...f,
-                            category: value,
-                            subCategory: "",
-                          }));
-                          setCategoryModalVisible(false);
-                        },
-                      })
-                    }
-                  />
-                </View>
-              </ModalComponent>
             </View>
 
-            {/* Menu déroulant des sous-catégories */}
-            <View style={styles.formField}>
-              <Text style={styles.label}>Sous-catégorie</Text>
-              <TouchableOpacity
-                style={[
-                  styles.dropdownButton,
-                  !filter.category && styles.dropdownButtonDisabled,
-                ]}
-                onPress={() =>
-                  filter.category && setSubCategoryModalVisible(true)
-                }
-                disabled={!filter.category}
-                accessibilityLabel="Sélectionner une sous-catégorie"
-              >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    !filter.subCategory && { color: theme.colors.text + "80" },
-                  ]}
-                >
-                  {filter.subCategory || "Sélectionnez une sous-catégorie"}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={20}
-                  color={
-                    filter.category
-                      ? theme.colors.text
-                      : theme.colors.text + "80"
-                  }
-                />
-              </TouchableOpacity>
-              <ModalComponent
-                isVisible={subCategoryModalVisible}
-                onBackdropPress={() => setSubCategoryModalVisible(false)}
-                style={styles.modal}
-              >
-                <View style={styles.modalContent}>
-                  <FlatList
-                    data={subCategoryOptions}
-                    keyExtractor={(item) => item}
-                    renderItem={({ item }) =>
-                      renderDropdownItem({
-                        item,
-                        onPress: (value) => {
-                          setFilter((f) => ({
-                            ...f,
-                            subCategory: value,
-                          }));
-                          setSubCategoryModalVisible(false);
-                        },
-                      })
-                    }
+            {selectedItem && (
+              <>
+                <View style={styles.productInfo}>
+                  <Text style={styles.productInfoText}>
+                    {selectedItem.productName} - {selectedItem.color} -{" "}
+                    {selectedItem.size}
+                  </Text>
+                  <Text style={styles.currentStockText}>
+                    Stock actuel: {selectedItem.quantity}
+                  </Text>
+                  <Text style={styles.stockIdText}>
+                    Stock ID: {selectedItem.stockId}
+                  </Text>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <Text style={styles.inputLabel}>
+                    Quantité à{" "}
+                    {updateAction === "add"
+                      ? "ajouter"
+                      : updateAction === "sell"
+                      ? "vendre"
+                      : "retirer"}
+                    :
+                  </Text>
+                  <TextInput
+                    style={styles.quantityInput}
+                    value={quantityInput}
+                    onChangeText={(text) => {
+                      console.log("HomeScreen - Quantity input changed:", text);
+                      setQuantityInput(text);
+                    }}
+                    placeholder="Entrez la quantité"
+                    keyboardType="numeric"
+                    placeholderTextColor={theme.colors.textSecondary}
                   />
                 </View>
-              </ModalComponent>
-            </View>
 
-            {/* Palette de couleurs */}
-            <View style={styles.formField}>
-              <Text style={styles.label}>Couleur</Text>
-              <View style={styles.colorPalette}>
-                {colors.map((c) => (
-                  <Animated.View
-                    key={c.name}
-                    style={{
-                      transform: [{ scale: colorScales[c.name] }],
+                <View style={styles.modalActionButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalActionButton, styles.cancelButton]}
+                    onPress={() => {
+                      console.log("HomeScreen - Cancel stock update");
+                      setStockUpdateModalVisible(false);
                     }}
                   >
-                    <TouchableOpacity
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: c.value },
-                        filter.color === c.name && styles.colorOptionSelected,
-                      ]}
-                      onPress={() => {
-                        setFilter((f) => ({ ...f, color: c.name }));
-                        animateColorPress(c.name);
-                      }}
-                      accessibilityLabel={`Sélectionner la couleur ${c.name}`}
-                    >
-                      {filter.color === c.name && (
-                        <Ionicons
-                          name="checkmark"
-                          size={24}
-                          color={
-                            c.name === "Blanc"
-                              ? theme.colors.primary
-                              : theme.colors.background
-                          }
-                          style={styles.colorCheckIcon}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  </Animated.View>
-                ))}
-              </View>
-              {filter.color && (
-                <Text style={styles.selectedColorText}>
-                  Sélectionné : {filter.color}
-                </Text>
-              )}
-            </View>
+                    <Text style={styles.cancelButtonText}>Annuler</Text>
+                  </TouchableOpacity>
 
-            {/* Menu déroulant des tailles */}
-            <View style={styles.formField}>
-              <Text style={styles.label}>Taille</Text>
-              <TouchableOpacity
-                style={styles.dropdownButton}
-                onPress={() => setSizeModalVisible(true)}
-                accessibilityLabel="Sélectionner une taille"
-              >
-                <Text
-                  style={[
-                    styles.dropdownText,
-                    !filter.size && { color: theme.colors.text + "80" },
-                  ]}
-                >
-                  {filter.size || "Sélectionnez une taille"}
-                </Text>
-                <Ionicons
-                  name="chevron-down"
-                  size={20}
-                  color={theme.colors.text}
-                />
-              </TouchableOpacity>
-              <ModalComponent
-                isVisible={sizeModalVisible}
-                onBackdropPress={() => setSizeModalVisible(false)}
-                style={styles.modal}
-              >
-                <View style={styles.modalContent}>
-                  <FlatList
-                    data={sizes}
-                    keyExtractor={(item) => item}
-                    renderItem={({ item }) =>
-                      renderDropdownItem({
-                        item,
-                        onPress: (value) => {
-                          setFilter((f) => ({
-                            ...f,
-                            size: value,
-                          }));
-                          setSizeModalVisible(false);
-                        },
-                      })
-                    }
-                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.modalActionButton,
+                      updateAction === "add"
+                        ? styles.addButton
+                        : updateAction === "sell"
+                        ? styles.sellButton
+                        : styles.removeButton,
+                      updatingStock && styles.disabledButton,
+                    ]}
+                    onPress={() => {
+                      console.log("HomeScreen - Confirm stock update");
+                      handleStockUpdate();
+                    }}
+                    disabled={updatingStock}
+                  >
+                    {updatingStock ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.white}
+                      />
+                    ) : (
+                      <Text style={styles.actionButtonText}>
+                        {updateAction === "add"
+                          ? "Ajouter"
+                          : updateAction === "sell"
+                          ? "Vendre"
+                          : "Retirer"}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
-              </ModalComponent>
-            </View>
-
-            {/* Boutons */}
-            <View style={styles.filterButtonsRow}>
-              <TouchableOpacity
-                style={[styles.filterButtonModal, { marginRight: 8 }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text
-                  style={{ color: theme.colors.white, textAlign: "center" }}
-                >
-                  Annuler
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.filterButtonModal, { marginLeft: 8 }]}
-                onPress={() => setFilterVisible(false)}
-              >
-                <Text
-                  style={{ color: theme.colors.white, textAlign: "center" }}
-                >
-                  Appliquer
-                </Text>
-              </TouchableOpacity>
-            </View>
+              </>
+            )}
           </View>
         </View>
-      )}
-    </SafeAreaViewContext>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -715,254 +1220,438 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: theme.colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-    elevation: 2,
-    position: "relative",
+    borderBottomColor: theme.colors.border,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
-  filterButton: {
-    position: "absolute",
-    right: 16,
-    top: Platform.OS === "ios" ? 16 : 18,
-    zIndex: 10,
+  headerTextContainer: {
+    marginLeft: 12,
   },
   title: {
     fontSize: 18,
-    fontWeight: "700",
-    color: theme.colors.primary,
-    marginLeft: 12,
+    fontWeight: "bold",
+    color: theme.colors.text,
   },
   subtitle: {
     fontSize: 14,
-    color: theme.colors.text,
-    marginLeft: 12,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
-  tableContainer: {
-    flex: 1,
-    marginTop: 8,
-    paddingHorizontal: 8,
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: 500,
-  },
-  tableHeader: {
+  searchContainer: {
     flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginVertical: 12,
     backgroundColor: theme.colors.white,
-    borderBottomWidth: 2,
-    borderBottomColor: theme.colors.primary + "40",
     borderRadius: 8,
-    marginBottom: 4,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
   },
-  tableRow: {
-    flexDirection: "row",
-    backgroundColor: theme.colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    borderRadius: 8,
-    marginVertical: 2,
-    paddingVertical: 8,
+  searchIcon: {
+    marginRight: 8,
   },
-  headerCell: {
+  searchInput: {
     flex: 1,
-    fontWeight: "700",
-    fontSize: 13,
-    color: theme.colors.primary,
-    textAlign: "center",
-    paddingHorizontal: 4,
-  },
-  cell: {
-    flex: 1,
-    fontSize: 12,
+    paddingVertical: 10,
+    fontSize: 16,
     color: theme.colors.text,
-    textAlign: "center",
-    paddingHorizontal: 4,
   },
-  nameCell: { flex: 1.5, minWidth: 80, maxWidth: 120 },
-  categoryCell: { flex: 1, minWidth: 70, maxWidth: 100 },
-  subCategoryCell: { flex: 1, minWidth: 70, maxWidth: 100 },
-  colorCell: { flex: 1, minWidth: 50, maxWidth: 70 },
-  sizeCell: { flex: 1, minWidth: 40, maxWidth: 60 },
-  qtyCell: { flex: 0.7, minWidth: 35, maxWidth: 50 },
-  emptyList: {
-    flexGrow: 1,
+  clearButton: {
+    padding: 4,
+  },
+  sortContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sortLabel: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+  },
+  sortOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  sortOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: theme.colors.lightGrey,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  sortOptionActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  sortOptionText: {
+    fontSize: 14,
+    color: theme.colors.text,
+  },
+  sortOptionTextActive: {
+    color: theme.colors.white,
+    fontWeight: "bold",
+  },
+  centered: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 16,
   },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
+  loadingText: {
+    marginTop: 12,
+    color: theme.colors.textSecondary,
+    fontSize: 16,
+  },
+  errorText: {
+    marginTop: 12,
+    color: theme.colors.error,
+    textAlign: "center",
+    fontSize: 16,
+    paddingHorizontal: 24,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: theme.colors.white,
+    fontWeight: "bold",
   },
   emptyText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: theme.colors.text + "DD",
     marginTop: 16,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: theme.colors.text,
   },
   emptySubText: {
-    fontSize: 12,
-    color: theme.colors.text + "99",
     marginTop: 8,
+    fontSize: 14,
+    color: theme.colors.textSecondary,
     textAlign: "center",
+    paddingHorizontal: 24,
+  },
+  clearSearchText: {
+    marginTop: 8,
+    color: theme.colors.primary,
+    fontWeight: "500",
+  },
+  listContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 80,
+  },
+  stockItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginVertical: 6,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: theme.colors.white,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  stockInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  stockDetails: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginTop: 4,
+  },
+  stockProperty: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 12,
+    marginBottom: 4,
+  },
+  propertyLabel: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginRight: 4,
+  },
+  propertyValue: {
+    fontSize: 12,
+    color: theme.colors.text,
+    fontWeight: "500",
+  },
+  colorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  colorCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginLeft: 4,
+  },
+  quantityContainer: {
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.lightGrey,
+  },
+  quantityLabel: {
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
+  },
+  quantity: {
+    fontSize: 18,
+    fontWeight: "bold",
   },
   menuButton: {
     position: "absolute",
-    right: 20,
-    bottom: 70,
+    right: 16,
+    bottom: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: theme.colors.primary,
-    padding: 16,
-    borderRadius: 50,
-    elevation: 6,
-    zIndex: 101,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   menuContainer: {
     position: "absolute",
-    right: 20,
-    bottom: 140,
+    bottom: 80,
+    right: 16,
     backgroundColor: theme.colors.white,
-    padding: 16,
     borderRadius: 16,
-    elevation: 10,
-    zIndex: 101,
+    padding: 8,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
   menuText: {
-    fontSize: 15,
-    marginLeft: 12,
+    marginLeft: 16,
+    fontSize: 16,
     color: theme.colors.text,
   },
-  filterModalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.3)",
+  modalOverlay: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 200,
-  },
-  filterModal: {
-    backgroundColor: theme.colors.white,
-    borderRadius: 16,
-    padding: 24,
-    elevation: 10,
-    maxWidth: 500,
-    minWidth: 240,
-  },
-  filterTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: theme.colors.primary,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  formField: {
-    marginBottom: 18,
-  },
-  label: {
-    fontSize: 13,
-    color: theme.colors.primary,
-    fontWeight: "600",
-    marginBottom: 6,
-  },
-  dropdownButton: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.inputBackground,
-    borderRadius: theme.borderRadius.medium,
-    backgroundColor: theme.colors.white,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-  },
-  dropdownButtonDisabled: {
-    opacity: 0.5,
-  },
-  dropdownText: {
-    fontSize: 13,
-    color: theme.colors.text,
-  },
-  modal: {
-    justifyContent: "flex-end",
-    margin: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    padding: 16,
   },
   modalContent: {
     backgroundColor: theme.colors.white,
-    borderTopLeftRadius: theme.borderRadius.large,
-    borderTopRightRadius: theme.borderRadius.large,
-    padding: 18,
-    maxHeight: "50%",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.shadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  dropdownItem: {
-    padding: 12,
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: theme.colors.primary,
+    flex: 1,
+  },
+  closeButton: {
+    padding: 4,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.inputBackground,
+    borderBottomColor: theme.colors.border,
   },
-  dropdownItemText: {
-    fontSize: 13,
+  detailLabel: {
+    fontSize: 16,
+    color: theme.colors.textSecondary,
+  },
+  detailValue: {
+    fontSize: 16,
+    fontWeight: "500",
     color: theme.colors.text,
   },
-  colorPalette: {
+  colorDetailContainer: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    flexWrap: "wrap",
-    marginVertical: 6,
-    marginBottom: 12,
+    alignItems: "center",
   },
-  colorOption: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: "transparent",
-    margin: 6,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.13,
-    shadowRadius: 2,
+  colorDetailCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginLeft: 8,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 24,
+  },
+  actionButton: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-  colorOptionSelected: {
-    borderColor: theme.colors.primary,
-    borderWidth: 3,
-  },
-  colorCheckIcon: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    right: 8,
-    bottom: 8,
-    textAlign: "center",
-    textAlignVertical: "center",
-  },
-  selectedColorText: {
-    fontSize: 11,
-    color: theme.colors.text,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  filterButtonsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 28,
-  },
-  filterButtonModal: {
-    backgroundColor: theme.colors.primary,
     paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
     flex: 1,
+    marginHorizontal: 4,
+  },
+  addButton: {
+    backgroundColor: theme.colors.success,
+  },
+  sellButton: {
+    backgroundColor: "#FF9500", // Orange for sell
+  },
+  removeButton: {
+    backgroundColor: theme.colors.error,
+  },
+  actionButtonText: {
+    color: theme.colors.white,
+    fontWeight: "bold",
+    marginLeft: 4,
+  },
+  // Stock update modal styles
+  productInfo: {
+    marginBottom: 20,
+    padding: 12,
+    backgroundColor: theme.colors.lightGrey,
+    borderRadius: 8,
+  },
+  productInfoText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  currentStockText: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
+  },
+  stockIdText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  quantityInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: theme.colors.text,
+    backgroundColor: theme.colors.white,
+  },
+  modalActionButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  modalActionButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 4,
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.lightGrey,
+  },
+  cancelButtonText: {
+    color: theme.colors.text,
+    fontWeight: "bold",
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

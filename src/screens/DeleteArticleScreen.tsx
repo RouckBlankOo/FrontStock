@@ -1,88 +1,106 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
+  SafeAreaView,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { theme } from "../constants/theme";
-import { RootStackParamList, Product } from "../types";
-import { getProducts, deleteProduct } from "../services/api";
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+import { scanBarcode, deleteProduct } from "../services/api";
 
 export default function DeleteArticleScreen() {
-  const navigation = useNavigation<NavigationProp>();
-  const [barcode, setBarcode] = useState<string>("");
-  const [product, setProduct] = useState<Product | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const navigation = useNavigation();
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [scannedProduct, setScannedProduct] = useState<any | null>(null);
+  const cameraRef = useRef<CameraView>(null);
+  const [permission, requestPermission] = useCameraPermissions();
 
   useEffect(() => {
-    const fetchProduct = async () => {
-      if (!barcode) {
-        setProduct(null);
-        return;
+    (async () => {
+      if (permission) {
+        setHasPermission(permission.granted);
+      } else {
+        const newPermission = await requestPermission();
+        setHasPermission(newPermission.granted);
       }
-      try {
-        const response = await getProducts({ barcode });
-        if (response.data.data.products.length > 0) {
-          setProduct(response.data.data.products[0]);
-        } else {
-          setProduct(null);
-        }
-      } catch (error) {
-        console.error("Error fetching product:", error);
-        setProduct(null);
-      }
-    };
+    })();
+  }, [permission, requestPermission]);
 
-    fetchProduct();
-  }, [barcode]);
-
-  const handleBarcodeScan = () => {
-    navigation.navigate("BarcodeScanner", {
-      onScan: (scannedBarcode: string) => setBarcode(scannedBarcode),
-    });
+  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+    if (isProcessing || scannedProduct) return;
+    setIsProcessing(true);
+    try {
+      const response = await scanBarcode(data);
+      setScannedProduct(response.data.data);
+    } catch (error: any) {
+      Alert.alert("Erreur", error.message || "Produit non trouvé.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleDelete = async () => {
-    if (!product) {
-      Alert.alert(
-        "Erreur",
-        "Veuillez scanner ou entrer un code-barres valide."
-      );
-      return;
-    }
-
-    setIsLoading(true);
+    if (!scannedProduct?._id) return;
+    setIsProcessing(true);
     try {
-      await deleteProduct(product.barcode);
-      Alert.alert("Succès", "Produit supprimé avec succès !", [
-        { text: "OK", onPress: () => navigation.goBack() },
+      await deleteProduct(scannedProduct._id);
+      Alert.alert("Succès", "Article supprimé avec succès !", [
+        { text: "OK", onPress: () => setScannedProduct(null) },
       ]);
-      setBarcode("");
-      setProduct(null);
     } catch (error: any) {
-      const errorMessage =
-        error.message || "Échec de la suppression du produit.";
-      Alert.alert("Erreur", errorMessage);
+      Alert.alert("Erreur", error.message || "Échec de la suppression.");
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
-  return (
-    <View style={styles.container}>
-      <View style={[styles.header, { backgroundColor: theme.colors.danger }]}>
+  const handleRecapture = () => {
+    setScannedProduct(null);
+    setIsProcessing(false);
+  };
+
+  const handleBack = () => {
+    navigation.goBack();
+  };
+
+  if (hasPermission === null) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.message}>Demande d'autorisation de caméra...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (hasPermission === false) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.message}>
+          Accès interdit à la caméra. Veuillez autoriser l'accès.
+        </Text>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={handleBack}
+          style={styles.backButton}
+          accessibilityLabel="Revenir"
+        >
+          <Text style={styles.backButtonText}>Revenir</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={handleBack}
           style={styles.backIcon}
-          accessibilityLabel="Retour"
+          accessibilityLabel="Revenir"
         >
           <Ionicons
             name="arrow-back-outline"
@@ -92,64 +110,73 @@ export default function DeleteArticleScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Supprimer un article</Text>
       </View>
-      <View style={styles.formCard}>
-        {/* Barcode Input */}
-        <View style={styles.formField}>
-          <Text style={styles.label}>Code-barres</Text>
-          <View style={styles.barcodeContainer}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Entrez ou scannez le code-barres"
-              value={barcode}
-              onChangeText={setBarcode}
-              accessibilityLabel="Entrer le code-barres"
+      <View style={styles.cameraContainer}>
+        {!scannedProduct ? (
+          <>
+            <CameraView
+              style={StyleSheet.absoluteFillObject}
+              ref={cameraRef}
+              facing="back"
+              onBarcodeScanned={handleBarcodeScanned}
+              barcodeScannerSettings={{
+                barcodeTypes: [
+                  "ean13",
+                  "ean8",
+                  "upc_a",
+                  "upc_e",
+                  "code128",
+                  "code39",
+                  "code93",
+                  "codabar",
+                  "qr",
+                ],
+              }}
             />
+            <View style={styles.overlay}>
+              <View style={styles.scanFrame} />
+              <Text style={styles.scanMessage}>
+                {isProcessing
+                  ? "Traitement en cours..."
+                  : "Scannez le code-barres de l'article à supprimer"}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.capturedContainer}>
+            <Text style={styles.capturedMessage}>Article scanné :</Text>
+            <Text style={styles.productDetail}>
+              Nom : {scannedProduct.name}
+            </Text>
+            <Text style={styles.productDetail}>
+              Prix : {scannedProduct.price} €
+            </Text>
+            <Text style={styles.productDetail}>
+              Stock :{" "}
+              {scannedProduct.stocks.reduce(
+                (sum: number, stock: any) => sum + stock.quantity,
+                0
+              )}
+            </Text>
             <TouchableOpacity
-              style={styles.scanButton}
-              onPress={handleBarcodeScan}
-              accessibilityLabel="Scanner le code-barres"
+              style={[styles.button, isProcessing && styles.buttonDisabled]}
+              onPress={handleDelete}
+              disabled={isProcessing}
+              accessibilityLabel="Supprimer l'article"
             >
-              <Ionicons
-                name="barcode-outline"
-                size={24}
-                color={theme.colors.primary}
-              />
+              <Text style={styles.buttonText}>Supprimer</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleRecapture}
+              disabled={isProcessing}
+              accessibilityLabel="Reprendre"
+            >
+              <Text style={styles.secondaryButtonText}>Reprendre</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Product Info */}
-        {product && (
-          <View style={styles.formField}>
-            <Text style={styles.label}>Produit</Text>
-            <Text style={styles.productInfo}>{product.name}</Text>
-            <Text style={styles.productInfo}>
-              Catégorie: {product.category}
-            </Text>
-            <Text style={styles.productInfo}>
-              Sous-catégorie: {product.subCategory}
-            </Text>
-            <Text style={styles.productInfo}>Prix: {product.price}</Text>
-          </View>
         )}
-
-        {/* Delete Button */}
-        <TouchableOpacity
-          style={[
-            styles.button,
-            { backgroundColor: theme.colors.danger },
-            isLoading && styles.buttonDisabled,
-          ]}
-          onPress={handleDelete}
-          disabled={isLoading}
-          accessibilityLabel="Supprimer le produit"
-        >
-          <Text style={styles.buttonText}>
-            {isLoading ? "Suppression en cours..." : "Supprimer le produit"}
-          </Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -159,6 +186,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
+    backgroundColor: theme.colors.primary,
     padding: theme.spacing.large,
     paddingTop: theme.spacing.large + 10,
     flexDirection: "row",
@@ -176,48 +204,59 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     textAlign: "center",
   },
-  formCard: {
-    ...theme.card,
-    padding: theme.spacing.large,
-    margin: theme.spacing.large,
-  },
-  formField: {
-    marginBottom: theme.spacing.large,
-  },
-  label: {
-    fontSize: theme.fontSizes.regular,
-    fontWeight: "500",
-    color: theme.colors.text,
-    marginBottom: theme.spacing.small,
-  },
-  barcodeContainer: {
-    flexDirection: "row",
+  cameraContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
   },
-  input: {
-    ...theme.input,
-    borderColor: theme.colors.inputBorder,
-    backgroundColor: theme.colors.inputBackground,
-    marginBottom: theme.spacing.medium,
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
   },
-  scanButton: {
-    padding: theme.spacing.medium,
-    backgroundColor: theme.colors.inputBackground,
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 3,
+    borderColor: theme.colors.primary,
     borderRadius: theme.borderRadius.medium,
-    marginLeft: theme.spacing.small,
+    backgroundColor: "transparent",
+    marginBottom: theme.spacing.large,
   },
-  productInfo: {
+  scanMessage: {
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.subtitle,
+    fontWeight: "bold",
+    textAlign: "center",
+    textShadowColor: theme.colors.black,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+  capturedContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: theme.spacing.large,
+  },
+  capturedMessage: {
+    fontSize: theme.fontSizes.subtitle,
+    fontWeight: "bold",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.large,
+    textAlign: "center",
+  },
+  productDetail: {
     fontSize: theme.fontSizes.regular,
     color: theme.colors.text,
-    padding: theme.spacing.medium,
-    backgroundColor: theme.colors.inputBackground,
-    borderRadius: theme.borderRadius.medium,
     marginBottom: theme.spacing.small,
+    textAlign: "center",
   },
   button: {
     ...theme.button,
+    backgroundColor: theme.colors.primary,
     alignItems: "center",
-    marginTop: theme.spacing.medium,
+    marginVertical: theme.spacing.medium,
   },
   buttonDisabled: {
     opacity: theme.button.disabledOpacity,
@@ -226,5 +265,37 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     fontSize: theme.fontSizes.regular,
     fontWeight: "bold",
+  },
+  secondaryButton: {
+    paddingVertical: theme.spacing.small,
+    paddingHorizontal: theme.spacing.large,
+    borderRadius: theme.borderRadius.medium,
+    backgroundColor: theme.colors.inputBackground,
+    marginTop: theme.spacing.medium,
+    ...theme.shadows.small,
+  },
+  secondaryButtonText: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSizes.regular,
+    fontWeight: "bold",
+  },
+  message: {
+    fontSize: theme.fontSizes.regular,
+    color: theme.colors.text,
+    textAlign: "center",
+    marginTop: theme.spacing.large,
+  },
+  backButton: {
+    marginTop: theme.spacing.large,
+    padding: theme.spacing.medium,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.medium,
+    ...theme.shadows.small,
+  },
+  backButtonText: {
+    color: theme.colors.white,
+    fontSize: theme.fontSizes.regular,
+    fontWeight: "bold",
+    textAlign: "center",
   },
 });

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Alert } from "react-native";
 import StockActionBase from "../components/StockActionBase";
 import { theme } from "../constants/theme";
-import { updateStock } from "../services/api";
+import { updateCategory } from "../services/api";
 
 export default function UpdateStockScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -22,7 +22,7 @@ export default function UpdateStockScreen() {
 
     setIsProcessing(true);
     try {
-      await updateStock(productId, { quantity, reason });
+      await updateCategory(productId, { quantity, reason });
       Alert.alert(
         "Succès",
         "L'ajustement de stock a été effectué avec succès."

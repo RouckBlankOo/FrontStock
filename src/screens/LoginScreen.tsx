@@ -31,42 +31,154 @@ export default function LoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const STATIC_USERNAME = "admin";
-  const STATIC_PASSWORD = "123456";
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Get device info for login tracking
+  const getDeviceName = () => {
+    return Platform.OS === "ios" ? "iPhone App" : "Android App";
+  };
+
   const handleLogin = async () => {
-    if (!username || !password) {
-      Alert.alert("Erreur", "Veuillez remplir tous les champs.", [
+    // Input validation
+    if (!username.trim() || !password.trim()) {
+      Alert.alert("Erreur de validation", "Veuillez remplir tous les champs.", [
         { text: "OK" },
       ]);
       return;
     }
 
-    // STATIC LOGIN CHECK
-    if (username === "admin" && password === "123456") {
-      try {
-        await AsyncStorage.setItem("token", "STATIC_TOKEN");
-        navigation.navigate("Home");
-      } catch (err) {
-        Alert.alert("Erreur", "Échec du stockage local.", [{ text: "OK" }]);
-      }
+    // Additional validation
+    if (username.trim().length < 3) {
+      Alert.alert(
+        "Erreur de validation",
+        "Le nom d'utilisateur doit contenir au moins 3 caractères.",
+        [{ text: "OK" }]
+      );
       return;
     }
 
-    const payload = { username, password, deviceName: "MobileApp" };
+    if (password.length < 6) {
+      Alert.alert(
+        "Erreur de validation",
+        "Le mot de passe doit contenir au moins 6 caractères.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    const payload = {
+      username: username.trim(),
+      password,
+      deviceName: getDeviceName(),
+    };
 
     setIsLoading(true);
+
     try {
+      console.log("Attempting login with:", {
+        username: payload.username,
+        deviceName: payload.deviceName,
+      });
+
       const response = await login(payload);
-      const { token } = response.data.data;
-      if (!token) throw new Error("Token non reçu du serveur.");
-      await AsyncStorage.setItem("token", token);
-      navigation.navigate("Home");
+
+      console.log("Login response:", response.data);
+
+      // Check if the response is successful
+      if (!response.data.success) {
+        throw new Error(response.data.message || "Échec de la connexion");
+      }
+
+      // Extract data from the response - adjust to match your API structure
+      const responseData = response.data.data;
+      const token = responseData.token;
+
+      // Create user object from the response data
+      const user = {
+        _id: responseData.id,
+        id: responseData.id, // Keep both for compatibility
+        name: responseData.name,
+        username: responseData.username,
+        role: responseData.role,
+      };
+
+      // Validate received data
+      if (!token) {
+        throw new Error("Token non reçu du serveur");
+      }
+
+      if (!user.name || !user.username || !user.role) {
+        throw new Error("Informations utilisateur incomplètes");
+      }
+
+      // Store authentication data
+      await Promise.all([
+        AsyncStorage.setItem("token", token),
+        AsyncStorage.setItem("user", JSON.stringify(user)),
+        AsyncStorage.setItem("lastLogin", new Date().toISOString()),
+      ]);
+
+      console.log("User logged in successfully:", user.name, user.role);
+
+      // Show success message
+      Alert.alert("Connexion réussie", `Bienvenue ${user.name} !`, [
+        {
+          text: "Continuer",
+          onPress: () => {
+            // Clear form
+            setUsername("");
+            setPassword("");
+
+            // Navigate to home
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Home" }],
+            });
+          },
+        },
+      ]);
     } catch (error: any) {
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Échec de la connexion. Veuillez réessayer.";
-      Alert.alert("Erreur", errorMessage, [{ text: "OK" }]);
+      console.error("Login error:", error);
+
+      let errorMessage = "Échec de la connexion. Veuillez réessayer.";
+
+      // Handle different types of errors
+      if (error.response) {
+        // Server responded with error status
+        const { status, data } = error.response;
+
+        switch (status) {
+          case 401:
+            errorMessage = "Nom d'utilisateur ou mot de passe incorrect.";
+            break;
+          case 403:
+            errorMessage = "Accès refusé. Contactez l'administrateur.";
+            break;
+          case 404:
+            errorMessage =
+              "Service non disponible. Veuillez réessayer plus tard.";
+            break;
+          case 429:
+            errorMessage =
+              "Trop de tentatives de connexion. Veuillez attendre.";
+            break;
+          case 500:
+            errorMessage = "Erreur serveur. Veuillez réessayer plus tard.";
+            break;
+          default:
+            errorMessage =
+              data?.message || `Erreur ${status}. Veuillez réessayer.`;
+        }
+      } else if (error.request) {
+        // Network error
+        errorMessage =
+          "Erreur de connexion. Vérifiez votre connexion internet.";
+      } else if (error.message) {
+        // Custom error message
+        errorMessage = error.message;
+      }
+
+      Alert.alert("Erreur de connexion", errorMessage, [{ text: "OK" }]);
     } finally {
       setIsLoading(false);
     }
@@ -74,6 +186,14 @@ export default function LoginScreen() {
 
   const handleSignupRedirect = () => {
     navigation.navigate("Signup");
+  };
+
+  const handleForgotPassword = () => {
+    Alert.alert(
+      "Mot de passe oublié",
+      "Contactez votre administrateur pour réinitialiser votre mot de passe.",
+      [{ text: "OK" }]
+    );
   };
 
   return (
@@ -93,15 +213,20 @@ export default function LoginScreen() {
           Connectez-vous à votre compte Stokÿ
         </Text>
       </LinearGradient>
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.card}>
+            <Text style={styles.cardTitle}>Connexion</Text>
+
             <View style={styles.inputContainer}>
               <Ionicons
                 name="person-circle-outline"
@@ -116,6 +241,12 @@ export default function LoginScreen() {
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
+                autoCorrect={false}
+                editable={!isLoading}
+                returnKeyType="next"
+                onSubmitEditing={() => {
+                  // Focus password field if available
+                }}
               />
             </View>
 
@@ -132,9 +263,33 @@ export default function LoginScreen() {
                 placeholderTextColor={theme.colors.text + "80"}
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                editable={!isLoading}
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
               />
+              <TouchableOpacity
+                style={styles.passwordToggle}
+                onPress={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              style={styles.forgotPassword}
+              onPress={handleForgotPassword}
+              disabled={isLoading}
+            >
+              <Text style={styles.forgotPasswordText}>
+                Mot de passe oublié ?
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -147,7 +302,15 @@ export default function LoginScreen() {
                 style={styles.gradientButton}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.white} />
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.white}
+                    />
+                    <Text style={[styles.buttonText, { marginLeft: 8 }]}>
+                      Connexion...
+                    </Text>
+                  </View>
                 ) : (
                   <>
                     <Ionicons
@@ -165,12 +328,24 @@ export default function LoginScreen() {
             <TouchableOpacity
               onPress={handleSignupRedirect}
               activeOpacity={0.8}
+              disabled={isLoading}
+              style={[isLoading && styles.linkDisabled]}
             >
               <Text style={styles.linkText}>
                 Pas de compte ? Inscrivez-vous
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Development info - remove in production */}
+          {__DEV__ && (
+            <View style={styles.devInfo}>
+              <Text style={styles.devInfoText}>Mode développement</Text>
+              <Text style={styles.devInfoSubtext}>
+                API: {process.env.NODE_ENV || "development"}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -212,20 +387,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingBottom: theme.spacing.large,
+    paddingHorizontal: theme.spacing.medium,
   },
   card: {
-    width: width > 400 ? 380 : "92%",
-    backgroundColor: "#FFFFFF", // white
-    borderRadius: 12,
-    padding: 16,
+    width: width > 400 ? 380 : "100%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
     marginTop: 16,
-    elevation: 4,
+    elevation: 8,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
   },
-
+  cardTitle: {
+    fontSize: theme.fontSizes.title,
+    fontWeight: theme.fontWeights.bold as any,
+    color: theme.colors.text,
+    textAlign: "center",
+    marginBottom: theme.spacing.large,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -235,6 +417,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.medium,
     paddingVertical: 2,
     width: "100%",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   inputIcon: {
     marginRight: theme.spacing.small,
@@ -244,6 +428,19 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.medium,
     fontSize: theme.fontSizes.regular,
     color: theme.colors.text,
+  },
+  passwordToggle: {
+    padding: 4,
+  },
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginTop: theme.spacing.small,
+    padding: theme.spacing.small,
+  },
+  forgotPasswordText: {
+    fontSize: theme.fontSizes.small,
+    color: theme.colors.primary,
+    fontWeight: theme.fontWeights.medium as any,
   },
   button: {
     marginVertical: theme.spacing.large,
@@ -259,6 +456,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.large,
     borderRadius: theme.borderRadius.medium,
     width: "100%",
+    minHeight: 50,
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   buttonIcon: {
     marginRight: theme.spacing.medium,
@@ -274,5 +476,25 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: theme.spacing.medium,
     fontWeight: theme.fontWeights.medium as any,
+  },
+  linkDisabled: {
+    opacity: 0.6,
+  },
+  devInfo: {
+    marginTop: theme.spacing.large,
+    padding: theme.spacing.medium,
+    backgroundColor: theme.colors.lightGrey,
+    borderRadius: theme.borderRadius.small,
+    alignItems: "center",
+  },
+  devInfoText: {
+    fontSize: theme.fontSizes.small,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.fontWeights.medium as any,
+  },
+  devInfoSubtext: {
+    fontSize: theme.fontSizes.small - 2,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
   },
 });

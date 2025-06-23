@@ -3,6 +3,7 @@ import { Alert } from "react-native";
 import StockActionBase from "../components/StockActionBase";
 import { theme } from "../constants/theme";
 import { sellStock } from "../services/api";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SellStockScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -37,13 +38,15 @@ export default function SellStockScreen() {
   };
 
   return (
-    <StockActionBase
-      title="Vendre du Stock"
-      actionName="Vente"
-      actionColor={theme.colors.primary}
-      buttonText={isProcessing ? "Traitement..." : "Confirmer la Vente"}
-      onSubmit={handleSellStock}
-      isDecrement={true}
-    />
+    <SafeAreaView style={{ flex: 1 }}>
+      <StockActionBase
+        title="Vendre du Stock"
+        actionName="Vente"
+        actionColor={theme.colors.primary}
+        buttonText={isProcessing ? "Traitement..." : "Confirmer la Vente"}
+        onSubmit={handleSellStock}
+        isDecrement={true}
+      />
+    </SafeAreaView>
   );
 }
