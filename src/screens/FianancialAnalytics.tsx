@@ -103,7 +103,7 @@ const FianancialAnalytics = () => {
                     }}
                     width={SCREEN_WIDTH - 32}
                     height={220}
-                    yAxisLabel="€"
+                    yAxisLabel="TND"
                     yAxisSuffix=""
                     yAxisInterval={1}
                     chartConfig={{
@@ -138,7 +138,7 @@ const FianancialAnalytics = () => {
                 data={financeDataCurrent}
                 width={SCREEN_WIDTH - 32}
                 height={260}
-                yAxisLabel="€"
+                yAxisLabel="TND"
                 yAxisSuffix=""
                 yAxisInterval={1}
                 chartConfig={{

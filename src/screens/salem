@@ -180,7 +180,7 @@ export default function HomeScreen() {
             </View>
             <View style={styles.stockProperty}>
               <Text style={styles.propertyLabel}>Prix:</Text>
-              <Text style={styles.propertyValue}>{item.price}€</Text>
+              <Text style={styles.propertyValue}>{item.price}TND</Text>
             </View>
           </View>
         </View>
@@ -479,7 +479,7 @@ export default function HomeScreen() {
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Prix:</Text>
-                <Text style={styles.detailValue}>{selectedItem.price}€</Text>
+                <Text style={styles.detailValue}>{selectedItem.price}TND</Text>
               </View>
 
               <View style={styles.modalActions}>

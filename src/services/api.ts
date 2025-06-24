@@ -23,12 +23,12 @@ export interface SubCategory {
 }
 
 export interface ProductStock {
-  _id: string; // Added stock ID
+  _id?: string;
   color: string;
   size: string;
   quantity: number;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Product {

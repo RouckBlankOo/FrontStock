@@ -220,7 +220,7 @@ export default function HomeScreen() {
     fetchData();
   }, [fetchData]);
 
-  // Transform products data to flat stock items for display with default values
+  // Transform products data to flat stock items for display
   const transformProductsToStockItems = useCallback(
     (
       products: Product[],
@@ -312,21 +312,19 @@ export default function HomeScreen() {
           }
         );
 
-        // Create a stock item for each color/size combination with default values
+        // Create a stock item for each color/size combination
         product.stocks.forEach((stock, stockIndex) => {
           const stockItem: StockDisplayItem = {
-            _id: `${product._id}-${stock.color || "unknown"}-${
-              stock.size || "unknown"
-            }`,
+            _id: `${product._id}-${stock.color}-${stock.size}`,
             productId: product._id,
-            stockId: stock._id ?? "",
-            productName: product.name || "Nom inconnu",
+            stockId: stock._id ?? "", // Individual stock ID, fallback to empty string if undefined
+            productName: product.name,
             category: categoryName,
             subCategory: subCategoryName,
-            price: product.price || 0,
-            color: stock.color || "Inconnue",
-            size: stock.size || "Inconnue",
-            quantity: stock.quantity ?? 0,
+            price: product.price,
+            color: stock.color,
+            size: stock.size,
+            quantity: stock.quantity,
           };
 
           console.log(
@@ -338,9 +336,9 @@ export default function HomeScreen() {
               productId: stockItem.productId,
               stockId: stockItem.stockId,
               productName: stockItem.productName,
-              color: stockItem.color,
-              size: stockItem.size,
-              quantity: stockItem.quantity,
+              color: stock.color,
+              size: stock.size,
+              quantity: stock.quantity,
             }
           );
 
@@ -357,15 +355,15 @@ export default function HomeScreen() {
     []
   );
 
-  // Filter stock items based on search query with safeguards
+  // Filter stock items based on search query
   const filteredStockItems = stockItems.filter((item) => {
     const query = searchQuery.toLowerCase();
     const matches =
-      (item.productName || "").toLowerCase().includes(query) ||
-      (item.category || "").toLowerCase().includes(query) ||
-      (item.subCategory || "").toLowerCase().includes(query) ||
-      (item.color || "").toLowerCase().includes(query) ||
-      (item.size || "").toLowerCase().includes(query);
+      item.productName.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query) ||
+      item.subCategory.toLowerCase().includes(query) ||
+      item.color.toLowerCase().includes(query) ||
+      item.size.toLowerCase().includes(query);
 
     if (searchQuery && matches) {
       console.log("HomeScreen - filteredStockItems - Item matches search:", {
@@ -379,6 +377,7 @@ export default function HomeScreen() {
     return matches;
   });
 
+  // Sort stock items
   // Sort stock items with enhanced color sorting
   const sortedStockItems = [...filteredStockItems].sort((a, b) => {
     if (!sortBy) return 0;
@@ -411,10 +410,10 @@ export default function HomeScreen() {
       ];
 
       const indexA = colorOrder.findIndex(
-        (color) => color.toLowerCase() === (valueA || "").toLowerCase()
+        (color) => color.toLowerCase() === valueA.toString().toLowerCase()
       );
       const indexB = colorOrder.findIndex(
-        (color) => color.toLowerCase() === (valueB || "").toLowerCase()
+        (color) => color.toLowerCase() === valueB.toString().toLowerCase()
       );
 
       // If both colors are in the predefined order, sort by that order
@@ -423,8 +422,8 @@ export default function HomeScreen() {
       }
 
       // If one or both colors are not in predefined order, fall back to alphabetical
-      const colorA = (valueA || "").toLowerCase();
-      const colorB = (valueB || "").toLowerCase();
+      const colorA = valueA.toString().toLowerCase();
+      const colorB = valueB.toString().toLowerCase();
       return sortOrder === "asc"
         ? colorA.localeCompare(colorB)
         : colorB.localeCompare(colorA);
@@ -707,7 +706,7 @@ export default function HomeScreen() {
   const renderStockItem = useCallback(
     ({ item }: { item: StockDisplayItem }) => {
       const colorObj = productColors.find(
-        (c) => c.name.toLowerCase() === (item.color || "").toLowerCase()
+        (c) => c.name.toLowerCase() === item.color.toLowerCase()
       );
 
       return (

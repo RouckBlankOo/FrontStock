@@ -177,7 +177,7 @@ export default function BarcodeScannerScreen() {
 
         Alert.alert(
           "Produit trouvé !",
-          `${product.name}\nPrix: ${product.price}€`,
+          `${product.name}\nPrix: ${product.price}TND`,
           [{ text: "OK" }]
         );
       } else {
@@ -575,7 +575,7 @@ export default function BarcodeScannerScreen() {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Prix :</Text>
                   <Text style={styles.detailValue}>
-                    {scannedProduct.price} €
+                    {scannedProduct.price} TND
                   </Text>
                 </View>
 

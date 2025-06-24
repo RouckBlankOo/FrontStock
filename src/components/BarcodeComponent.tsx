@@ -17,14 +17,7 @@ const BarcodeComponent = ({
 }: BarcodeComponentProps) => {
   return (
     <View>
-      <Barcode
-        value={value}
-        format="CODE128"
-        height={height}
-        width={width}
-        text={text || value}
-        maxWidth={300}
-      />
+      <Barcode value={value} height={height} maxWidth={300} />
     </View>
   );
 };

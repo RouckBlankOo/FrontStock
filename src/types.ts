@@ -17,6 +17,7 @@ export type RootStackParamList = {
   UpdateStockScreen: undefined; // Added UpdateStockScreen
   StockActionMenu: undefined; // Added StockActionMenu
   ProductDetails: { productId: string };
+  BarcodeScannerScreen: undefined;
 };
 
 // Add this new interface

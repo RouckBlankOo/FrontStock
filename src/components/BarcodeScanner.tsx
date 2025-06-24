@@ -262,6 +262,12 @@ const BarcodeScanner = ({ onBarcodeScanned }: BarcodeScannerProps) => {
                 "code128",
                 "code39",
                 "upc_e",
+                "upc_a",
+                "code93",
+                "codabar",
+                "datamatrix",
+                "pdf417",
+                "aztec",
               ],
             }}
             onBarcodeScanned={handleBarCodeScanned}
